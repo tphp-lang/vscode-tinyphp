@@ -1,0 +1,157 @@
+{
+    "Class": {
+        "prefix": "class",
+        "body": ["class ${1:ClassName}", "{", "\t${0}", "}"],
+        "description": "Class declaration"
+    },
+    "Class extends": {
+        "prefix": "classe",
+        "body": ["class ${1:ClassName} extends ${2:ParentClass}", "{", "\t${0}", "}"],
+        "description": "Class with extends"
+    },
+    "Interface": {
+        "prefix": "interface",
+        "body": ["interface ${1:InterfaceName}", "{", "\tpublic function ${2:method}(${3}): ${4:void};", "\t${0}", "}"],
+        "description": "Interface declaration"
+    },
+    "Trait": {
+        "prefix": "trait",
+        "body": ["trait ${1:TraitName}", "{", "\t${0}", "}"],
+        "description": "Trait declaration"
+    },
+    "Enum": {
+        "prefix": "enum",
+        "body": ["enum ${1:EnumName}", "{", "\tcase ${2:CASE_NAME};", "\t${0}", "}"],
+        "description": "Enum declaration"
+    },
+    "Function": {
+        "prefix": "function",
+        "body": ["function ${1:name}(${2:params})${3:: ${4:returnType}}", "{", "\t${0}", "}"],
+        "description": "Function declaration"
+    },
+    "Public method": {
+        "prefix": "pubf",
+        "body": ["public function ${1:name}(${2:params}): ${3:void}", "{", "\t${0}", "}"],
+        "description": "Public method"
+    },
+    "Private method": {
+        "prefix": "prif",
+        "body": ["private function ${1:name}(${2:params}): ${3:void}", "{", "\t${0}", "}"],
+        "description": "Private method"
+    },
+    "Static method": {
+        "prefix": "statf",
+        "body": ["public static function ${1:name}(${2:params}): ${3:void}", "{", "\t${0}", "}"],
+        "description": "Static method"
+    },
+    "if": {
+        "prefix": "if",
+        "body": ["if (${1:condition}) {", "\t${0}", "}"],
+        "description": "If statement"
+    },
+    "if-else": {
+        "prefix": "ifelse",
+        "body": ["if (${1:condition}) {", "\t${2}", "} else {", "\t${0}", "}"],
+        "description": "If-else statement"
+    },
+    "for": {
+        "prefix": "for",
+        "body": ["for (\\$${1:i} = ${2:0}; \\$${1:i} < ${3:n}; \\$${1:i}++) {", "\t${0}", "}"],
+        "description": "For loop"
+    },
+    "foreach": {
+        "prefix": "foreach",
+        "body": ["foreach (\\$${1:array} as \\$${2:key} => \\$${3:value}) {", "\t${0}", "}"],
+        "description": "Foreach loop"
+    },
+    "while": {
+        "prefix": "while",
+        "body": ["while (${1:condition}) {", "\t${0}", "}"],
+        "description": "While loop"
+    },
+    "do-while": {
+        "prefix": "do",
+        "body": ["do {", "\t${0}", "} while (${1:condition});"],
+        "description": "Do-while loop"
+    },
+    "switch": {
+        "prefix": "switch",
+        "body": ["switch (${1:expr}) {", "\tcase ${2:value}:", "\t\t${3}", "\t\tbreak;", "\tdefault:", "\t\t${0}", "}"],
+        "description": "Switch statement"
+    },
+    "match": {
+        "prefix": "match",
+        "body": ["match (${1:expr}) {", "\t${2:pattern} => ${3:result},", "\tdefault => ${0:defaultResult},", "}"],
+        "description": "Match expression"
+    },
+    "try-catch": {
+        "prefix": "try",
+        "body": ["try {", "\t${1}", "} catch (${2:Exception} \\$${3:e}) {", "\t${0}", "}"],
+        "description": "Try-catch"
+    },
+    "try-catch-finally": {
+        "prefix": "trycf",
+        "body": ["try {", "\t${1}", "} catch (${2:Exception} \\$${3:e}) {", "\t${4}", "} finally {", "\t${0}", "}"],
+        "description": "Try-catch-finally"
+    },
+    "namespace": {
+        "prefix": "ns",
+        "body": ["namespace ${1:App\\\\Module};", "", "${0}"],
+        "description": "Namespace"
+    },
+    "Arrow function": {
+        "prefix": "fn",
+        "body": "fn(\\$${1:x}) => ${0:expr}",
+        "description": "Arrow function"
+    },
+    "echo": {
+        "prefix": "echo",
+        "body": "echo \\$${1:var};${0}",
+        "description": "Echo variable"
+    },
+    "var_dump": {
+        "prefix": "vd",
+        "body": "var_dump(\\$${1:var});${0}",
+        "description": "var_dump debug"
+    },
+    "array": {
+        "prefix": "arr",
+        "body": "[${1:items}]",
+        "description": "Array literal"
+    },
+    "C call": {
+        "prefix": "C",
+        "body": "C->${1:func}(${0})",
+        "description": "C interop call"
+    },
+    "#include": {
+        "prefix": "#include",
+        "body": "#include ${1|,Windows ,Linux ,MacOS ,Darwin |}\"${2:file}\"",
+        "description": "Preprocessor include (supports OS filter)"
+    },
+    "#include_angle": {
+        "prefix": "#include<",
+        "body": "#include ${1|,Windows ,Linux ,MacOS ,Darwin |}<${2:file}>",
+        "description": "Preprocessor include with angle brackets (supports OS filter)"
+    },
+    "#callback": {
+        "prefix": "#callback",
+        "body": "#callback ${1:name}(${2:params})",
+        "description": "Preprocessor callback"
+    },
+    "#flag": {
+        "prefix": "#flag",
+        "body": "#flag ${1|,GCC ,Clang ,TCC ,Windows ,Linux ,MacOS ,Darwin |}${2:-Dflag}",
+        "description": "Preprocessor compiler/linker flag (supports OS/CC filter)"
+    },
+    "#import": {
+        "prefix": "#import",
+        "body": "#import ${1:module}",
+        "description": "Preprocessor import"
+    },
+    "#debug": {
+        "prefix": "#debug",
+        "body": "#debug ${1:message}",
+        "description": "Preprocessor debug"
+    }
+}

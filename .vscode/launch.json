@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch TinyPHP Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/lib/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch + Debug Server",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/lib/**/*.js"
+            ],
+            "env": {
+                "mode": "debug"
+            }
+        },
+        {
+            "name": "Attach to Server (port 6040)",
+            "type": "node",
+            "request": "attach",
+            "port": 6040,
+            "restart": true,
+            "outFiles": [
+                "${workspaceFolder}/server/out/**/*.js"
+            ]
+        }
+    ]
+}

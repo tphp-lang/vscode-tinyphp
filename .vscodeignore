@@ -1,0 +1,16 @@
+.vscode/**
+src/**
+server/src/**
+node_modules/**
+!node_modules/vscode-languageclient/**
+!node_modules/vscode-languageserver/**
+!node_modules/vscode-languageserver-protocol/**
+!node_modules/vscode-languageserver-types/**
+!node_modules/vscode-languageserver-textdocument/**
+!node_modules/vscode-jsonrpc/**
+out/**
+test/**
+tsconfig.json
+webpack.config.js
+.gitignore
+*.vsix
