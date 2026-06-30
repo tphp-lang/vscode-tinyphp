@@ -5,7 +5,6 @@ import {
     TextDocuments,
     Diagnostic,
     DiagnosticSeverity,
-    ProposedFeatures,
     InitializeParams,
     DidChangeConfigurationNotification,
     CompletionItem,
@@ -35,7 +34,7 @@ import * as TinyPHP from './tinyphp-parser';
 import { formatDocument, formatRange } from './tinyphp-formatter';
 
 // Create a connection for the server
-let connection = createConnection(ProposedFeatures.all);
+let connection = createConnection();
 
 // Create a simple text document manager
 let documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
@@ -114,15 +113,15 @@ connection.onInitialized(() => {
 
 // ---- Document validation / Diagnostics ----
 
-connection.onDidChangeTextDocument(change => {
+documents.onDidChangeContent(change => {
     validateTextDocument(change.document);
 });
 
-connection.onDidOpenTextDocument(change => {
+documents.onDidOpen(change => {
     validateTextDocument(change.document);
 });
 
-connection.onDidSaveTextDocument(change => {
+documents.onDidSave(change => {
     validateTextDocument(change.document);
 });
 
@@ -150,6 +149,19 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         let openParens = (line.match(/\(/g) || []).length;
         let closeParens = (line.match(/\)/g) || []).length;
 
+        // Check for PHP opening tag — TinyPHP doesn't need <?php
+        if (/^<\?php\b/i.test(line)) {
+            diagnostics.push({
+                severity: DiagnosticSeverity.Information,
+                range: {
+                    start: { line: i, character: line.indexOf('<?') },
+                    end: { line: i, character: line.indexOf('<?php') + 5 }
+                },
+                message: 'TinyPHP does not require <?php. You can safely remove it.',
+                source: 'tinyphp'
+            });
+        }
+
         // Check for PHP short tags
         if (/<\?(?!php|=)/.test(line)) {
             diagnostics.push({
@@ -158,7 +170,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                     start: { line: i, character: line.indexOf('<?') },
                     end: { line: i, character: line.indexOf('<?') + 2 }
                 },
-                message: 'Short open tags are discouraged. Use <?php instead.',
+                message: 'PHP short tags are not needed in TinyPHP.',
                 source: 'tinyphp'
             });
         }

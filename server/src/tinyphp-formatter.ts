@@ -32,11 +32,18 @@ function formatText(text: string, options: FormatOptions): string {
     const lines = text.split(/\r?\n/);
     const result: string[] = [];
     let indentLevel = 0;
-    let inPhpTag = false;
 
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i];
-        let trimmed = line.trim();
+        let trimmed = line.trimStart();
+
+        // Preserve leading whitespace before preprocessor directives
+        if (/^\s*#/.test(line)) {
+            result.push(line.trim());
+            continue;
+        }
+
+        trimmed = trimmed.trim();
 
         // Skip empty lines
         if (trimmed.length === 0) {
@@ -44,43 +51,27 @@ function formatText(text: string, options: FormatOptions): string {
             continue;
         }
 
-        // PHP tag tracking
-        if (trimmed.startsWith('<?php')) {
-            inPhpTag = true;
-        }
+        // Count leading closing braces — decrease indent BEFORE output
+        const closesAtStart = (trimmed.match(/^\}+/) || [''])[0].length;
+        indentLevel = Math.max(0, indentLevel - closesAtStart);
 
-        // Decrease indent before closing braces
-        const closeCount = (trimmed.match(/^\}/g) || []).length;
-        if (closeCount > 0) {
-            indentLevel = Math.max(0, indentLevel - closeCount);
-        }
+        // Apply spacing fixes to content only (before adding indent)
+        let content = trimmed;
+        content = content.replace(/\b(if|elseif|for|foreach|while|switch|catch|match)\s*\(/g, '$1 (');
+        content = content.replace(/\)\s*\{/g, ') {');
+        content = content.replace(/\b(else|do|try|finally)\s*\{/g, '$1 {');
+        content = content.replace(/\}\s*(else|catch|while)\b/g, '} $1');
+        content = content.replace(/\s+(;)/g, '$1');
+        content = content.replace(/ {2,}/g, ' ');
 
-        // Build indented line
-        let indented = tab.repeat(indentLevel) + trimmed;
-
-        // Fix spacing: ensure space after certain keywords
-        indented = indented.replace(/\b(if|elseif|for|foreach|while|do|switch|catch)\s*\(/g, '$1 (');
-        // Fix spacing: ensure space before {
-        indented = indented.replace(/\)\s*\{/g, ') {');
-        indented = indented.replace(/\b(else|do)\s*\{/g, '$1 {');
-        // Fix spacing: semicolons
-        indented = indented.replace(/\s+;/g, ';');
-        // Fix multiple spaces
-        indented = indented.replace(/ {2,}/g, ' ');
-
+        const indented = tab.repeat(indentLevel) + content;
         result.push(indented);
 
-        // Increase indent after opening braces
-        // Count opening braces minus closing braces in the same line
+        // Count brace changes for next indent (exclude leading } already counted)
         const opens = (trimmed.match(/\{/g) || []).length;
         const closes = (trimmed.match(/\}/g) || []).length;
-        indentLevel = Math.max(0, indentLevel + opens - closes);
-
-        // Decrease for lines that END with } (single-line blocks)
-        if (trimmed.endsWith('}') && !trimmed.includes('{')) {
-            indentLevel = Math.max(0, indentLevel - 1);
-        }
+        indentLevel = Math.max(0, indentLevel + opens - (closes - closesAtStart));
     }
 
-    return result.join('\n') + '\n';
+    return result.join('\n');
 }

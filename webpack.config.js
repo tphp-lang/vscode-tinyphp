@@ -15,12 +15,12 @@ const config = {
   },
   devtool: 'source-map',
   externals: {
-    vscode: 'commonjs vscode'
+    vscode: 'commonjs vscode',
+    'vscode-languageclient': 'commonjs vscode-languageclient',
+    'vscode-languageclient/node': 'commonjs vscode-languageclient/node'
   },
   resolve: {
-    extensions: ['.ts', '.js'],
-    conditionNames: ['import', 'require'],
-    mainFields: ['module', 'main']
+    extensions: ['.ts', '.js']
   },
   module: {
     rules: [

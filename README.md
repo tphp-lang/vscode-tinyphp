@@ -4,7 +4,7 @@ VS Code IDE 插件，为 TinyPHP 语言提供全面的开发体验支持。
 
 ## 关于 TinyPHP
 
-[TinyPHP](https://github.com/your-org/tinyphp) 是一个 PHP → C AOT (Ahead-of-Time) 编译器，将 PHP 代码编译为原生二进制。它是 PHP 8.5 的强类型子集，支持约 80% 的 PHP 特性，并添加了 C 互操作等独有扩展。
+[TinyPHP](https://github.com/tphp-lang/TinyPHP) 是一个 PHP → C AOT (Ahead-of-Time) 编译器，将 PHP 代码编译为原生二进制。它是 PHP 8.5 的强类型子集，支持约 80% 的 PHP 特性，并添加了 C 互操作等独有扩展。
 
 ## 功能
 

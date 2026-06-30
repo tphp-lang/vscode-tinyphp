@@ -13,9 +13,6 @@
         "Linters",
         "Formatters"
     ],
-    "activationEvents": [
-        "onLanguage:tinyphp"
-    ],
     "keywords": [
         "tinyphp",
         "php",
