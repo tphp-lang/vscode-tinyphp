@@ -1,13 +1,28 @@
 {
-    "Class": {
+    "TinyPHP Class Entry": {
         "prefix": "class",
-        "body": ["class ${1:ClassName}", "{", "\t${0}", "}"],
-        "description": "Class declaration"
+        "body": ["class ${1:Main}", "{", "\tpublic function main(): void", "\t{", "\t\t${0:echo \"hello\\n\";}", "\t}", "}"],
+        "description": "TinyPHP class entry with main() method"
     },
     "Class extends": {
         "prefix": "classe",
         "body": ["class ${1:ClassName} extends ${2:ParentClass}", "{", "\t${0}", "}"],
         "description": "Class with extends"
+    },
+    "Class with constructor": {
+        "prefix": "classc",
+        "body": ["class ${1:ClassName}", "{", "\tpublic function __construct(${2})", "\t{", "\t\t${0}", "\t}", "}"],
+        "description": "Class with constructor"
+    },
+    "Class with constructor promotion": {
+        "prefix": "classcp",
+        "body": ["class ${1:ClassName}", "{", "\tpublic function __construct(", "\t\tpublic ${2:int} \\$${3:prop}", "\t) {", "\t\t${0}", "\t}", "}"],
+        "description": "Class with constructor promotion"
+    },
+    "Abstract class": {
+        "prefix": "abstract",
+        "body": ["abstract class ${1:ClassName}", "{", "\t${0}", "}"],
+        "description": "Abstract class declaration"
     },
     "Interface": {
         "prefix": "interface",
@@ -16,13 +31,18 @@
     },
     "Trait": {
         "prefix": "trait",
-        "body": ["trait ${1:TraitName}", "{", "\t${0}", "}"],
+        "body": ["trait ${1:TraitName}", "{", "\tpublic function ${2:method}(): ${3:void}", "\t{", "\t\t${0}", "\t}", "}"],
         "description": "Trait declaration"
     },
-    "Enum": {
+    "Enum (string backing)": {
         "prefix": "enum",
-        "body": ["enum ${1:EnumName}", "{", "\tcase ${2:CASE_NAME};", "\t${0}", "}"],
-        "description": "Enum declaration"
+        "body": ["enum ${1:Color}: ${2|string|string}", "{", "\tcase ${3:Red} = ${4:\"red\"};", "\tcase ${5:Green} = ${6:\"green\"};", "\tcase ${7:Blue} = ${8:\"blue\"};", "}"],
+        "description": "Enum with string backing type"
+    },
+    "Enum (int backing)": {
+        "prefix": "enumi",
+        "body": ["enum ${1:Status}: int", "{", "\tcase ${2:Pending} = 0;", "\tcase ${3:Active} = 1;", "\tcase ${4:Deleted} = 2;", "}"],
+        "description": "Enum with int backing type"
     },
     "Function": {
         "prefix": "function",
@@ -44,6 +64,16 @@
         "body": ["public static function ${1:name}(${2:params}): ${3:void}", "{", "\t${0}", "}"],
         "description": "Static method"
     },
+    "Arrow function": {
+        "prefix": "fn",
+        "body": "fn(\\$${1:x}) => ${0:expr}",
+        "description": "Arrow function"
+    },
+    "Closure": {
+        "prefix": "closure",
+        "body": ["function (${1:params}) use (${2:vars})${3:: ${4:void}}", "{", "\t${0}", "}"],
+        "description": "Closure with use"
+    },
     "if": {
         "prefix": "if",
         "body": ["if (${1:condition}) {", "\t${0}", "}"],
@@ -54,6 +84,11 @@
         "body": ["if (${1:condition}) {", "\t${2}", "} else {", "\t${0}", "}"],
         "description": "If-else statement"
     },
+    "if-elseif-else": {
+        "prefix": "elseif",
+        "body": ["if (${1:condition}) {", "\t${2}", "} elseif (${3:condition}) {", "\t${4}", "} else {", "\t${0}", "}"],
+        "description": "If-elseif-else statement"
+    },
     "for": {
         "prefix": "for",
         "body": ["for (\\$${1:i} = ${2:0}; \\$${1:i} < ${3:n}; \\$${1:i}++) {", "\t${0}", "}"],
@@ -62,7 +97,12 @@
     "foreach": {
         "prefix": "foreach",
         "body": ["foreach (\\$${1:array} as \\$${2:key} => \\$${3:value}) {", "\t${0}", "}"],
-        "description": "Foreach loop"
+        "description": "Foreach loop with key"
+    },
+    "foreach (value only)": {
+        "prefix": "foreachv",
+        "body": ["foreach (\\$${1:array} as \\$${2:value}) {", "\t${0}", "}"],
+        "description": "Foreach loop (value only)"
     },
     "while": {
         "prefix": "while",
@@ -70,7 +110,7 @@
         "description": "While loop"
     },
     "do-while": {
-        "prefix": "do",
+        "prefix": "dowhile",
         "body": ["do {", "\t${0}", "} while (${1:condition});"],
         "description": "Do-while loop"
     },
@@ -94,15 +134,35 @@
         "body": ["try {", "\t${1}", "} catch (${2:Exception} \\$${3:e}) {", "\t${4}", "} finally {", "\t${0}", "}"],
         "description": "Try-catch-finally"
     },
+    "throw": {
+        "prefix": "throw",
+        "body": "throw new ${1:Exception}(\"${2:message}\");${0}",
+        "description": "Throw exception"
+    },
     "namespace": {
         "prefix": "ns",
         "body": ["namespace ${1:App\\\\Module};", "", "${0}"],
-        "description": "Namespace"
+        "description": "Namespace declaration"
     },
-    "Arrow function": {
-        "prefix": "fn",
-        "body": "fn(\\$${1:x}) => ${0:expr}",
-        "description": "Arrow function"
+    "use import": {
+        "prefix": "use",
+        "body": "use ${1:App\\\\ClassName};${0}",
+        "description": "Use import"
+    },
+    "use group import": {
+        "prefix": "usegroup",
+        "body": "use ${1:App}\\\\{${2:ClassA}, ${3:ClassB}};${0}",
+        "description": "Use group import"
+    },
+    "list destructure": {
+        "prefix": "list",
+        "body": "list(\\$${1:a}, \\$${2:b}) = \\$${0:array};",
+        "description": "List destructure"
+    },
+    "array destructure": {
+        "prefix": "arrlist",
+        "body": "[\\$${1:a}, \\$${2:b}] = \\$${0:array};",
+        "description": "Array destructure"
     },
     "echo": {
         "prefix": "echo",
@@ -124,6 +184,21 @@
         "body": "C->${1:func}(${0})",
         "description": "C interop call"
     },
+    "c_int cast": {
+        "prefix": "cint",
+        "body": "c_int(${0:expr})",
+        "description": "PHP to C int cast"
+    },
+    "c_float cast": {
+        "prefix": "cfloat",
+        "body": "c_float(${0:expr})",
+        "description": "PHP to C float cast"
+    },
+    "c_str cast": {
+        "prefix": "cstr",
+        "body": "c_str(${0:expr})",
+        "description": "PHP to C string cast"
+    },
     "#include": {
         "prefix": "#include",
         "body": "#include ${1|,Windows ,Linux ,MacOS ,Darwin |}\"${2:file}\"",
@@ -136,7 +211,7 @@
     },
     "#callback": {
         "prefix": "#callback",
-        "body": "#callback ${1:name}(${2:params})",
+        "body": "#callback ${1:type} ${2:name}(${3:params})",
         "description": "Preprocessor callback"
     },
     "#flag": {

@@ -202,7 +202,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             });
         }
 
-        if (/\bysield\b/.test(line)) {
+        if (/\byield\b/.test(line)) {
             let idx = line.search(/\byield\b/);
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
@@ -281,22 +281,24 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         }
 
         // Check for __call / __get / __set magic methods
-        if (/function\s+__(?:call|get|set|callStatic)\b/.test(line)) {
-            let idx = line.search(/__(?:call|get|set|callStatic)/);
+        let magicMatch = line.match(/function\s+(__call|__get|__set|__callStatic)\b/);
+        if (magicMatch) {
+            let idx = line.indexOf(magicMatch[1]);
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
-                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 7 } },
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + magicMatch[1].length } },
                 message: 'Magic methods __call/__get/__set are not supported in TinyPHP (no dynamic dispatch).',
                 source: 'tinyphp'
             });
         }
 
         // Check for Reflection
-        if (/new\s+Reflection\w+/.test(line)) {
-            let idx = line.search(/Reflection/);
+        let reflMatch = line.match(/new\s+(Reflection\w+)/);
+        if (reflMatch) {
+            let idx = line.indexOf(reflMatch[1]);
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
-                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 10 } },
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + reflMatch[1].length } },
                 message: 'Reflection API is not supported in TinyPHP (no runtime metadata).',
                 source: 'tinyphp'
             });
@@ -312,7 +314,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 for (let p of untypedParams) {
                     let clean = p.replace(/^[,\s]+/, '').trim();
                     let pIdx = line.indexOf(clean);
-                    if (pIdx !== -1 && !new RegExp('\\\\w+\\s+' + clean.replace('$', '\\$')).test(params)) {
+                    if (pIdx !== -1 && !new RegExp('\\w+\\s+' + clean.replace('$', '\\$')).test(params)) {
                         diagnostics.push({
                             severity: DiagnosticSeverity.Warning,
                             range: {
@@ -327,15 +329,122 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             }
         }
 
-        if (/\?\s*(int|float|string|bool)\b/.test(line)) {
+        let nullableMatch = line.match(/\?\s*(int|float|string|bool)\b/);
+        if (nullableMatch) {
             let idx = line.search(/\?\s*(int|float|string|bool)\b/);
             diagnostics.push({
                 severity: DiagnosticSeverity.Error,
                 range: {
                     start: { line: i, character: idx },
-                    end: { line: i, character: idx + 1 }
+                    end: { line: i, character: idx + nullableMatch[0].length }
                 },
                 message: 'Nullable types (?int, ?string, etc.) are not supported in TinyPHP.',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for assert($str) — use assert_true/assert_false instead
+        if (/\bassert\s*\(/.test(line)) {
+            let idx = line.search(/\bassert\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 6 } },
+                message: 'assert($str) is not supported in TinyPHP. Use assert_true/assert_false/assert_eq_int/assert_eq_float/assert_eq_str.',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for create_function()
+        if (/\bcreate_function\s*\(/.test(line)) {
+            let idx = line.search(/\bcreate_function\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 15 } },
+                message: 'create_function() is not supported in TinyPHP (AOT compilation).',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for compact() / extract()
+        if (/\bcompact\s*\(/.test(line)) {
+            let idx = line.search(/\bcompact\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 7 } },
+                message: 'compact() is not supported in TinyPHP — no runtime symbol table.',
+                source: 'tinyphp'
+            });
+        }
+        if (/\bextract\s*\(/.test(line)) {
+            let idx = line.search(/\bextract\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 8 } },
+                message: 'extract() is not supported in TinyPHP — no runtime symbol table.',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for runtime introspection functions
+        if (/\bdebug_backtrace\s*\(/.test(line)) {
+            let idx = line.search(/\bdebug_backtrace\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 16 } },
+                message: 'debug_backtrace() is not supported in TinyPHP — no runtime call stack.',
+                source: 'tinyphp'
+            });
+        }
+        if (/\bget_defined_vars\s*\(/.test(line)) {
+            let idx = line.search(/\bget_defined_vars\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 16 } },
+                message: 'get_defined_vars() is not supported in TinyPHP — no runtime symbol table.',
+                source: 'tinyphp'
+            });
+        }
+        if (/\bfunc_get_args\s*\(/.test(line)) {
+            let idx = line.search(/\bfunc_get_args\b/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 14 } },
+                message: 'func_get_args() is not supported in TinyPHP.',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for $GLOBALS
+        if (/\$GLOBALS\b/.test(line)) {
+            let idx = line.search(/\$GLOBALS/);
+            diagnostics.push({
+                severity: DiagnosticSeverity.Error,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 8 } },
+                message: '$GLOBALS is not supported in TinyPHP — no global symbol table.',
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for variadic ...$args
+        if (/\.\.\.\$[a-zA-Z_]\w*/.test(line)) {
+            let idx = line.search(/\.\.\.\$[a-zA-Z_]\w*/);
+            let match = line.match(/\.\.\.\$([a-zA-Z_]\w*)/);
+            let name = match ? match[1] : 'args';
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + name.length + 4 } },
+                message: `Variadic ...\$${name} is not supported in TinyPHP — use explicit parameters instead.`,
+                source: 'tinyphp'
+            });
+        }
+
+        // Check for namespace block form (unsupported for multi-file)
+        if (/^\s*namespace\s+\w.*\{/.test(line)) {
+            let idx = line.indexOf('namespace');
+            diagnostics.push({
+                severity: DiagnosticSeverity.Warning,
+                range: { start: { line: i, character: idx }, end: { line: i, character: idx + 9 } },
+                message: 'Namespace block form namespace A { } is not supported in TinyPHP multi-file mode. Use namespace A; (semicolon form).',
                 source: 'tinyphp'
             });
         }
@@ -363,32 +472,46 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 // ---- Completion ----
 
 connection.onCompletion(
-    (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-        // We provide all completions initially, and let the client filter
-        // based on the current word prefix
-        return TinyPHP.getCompletionItems();
+    (textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+        let document = documents.get(textDocumentPosition.textDocument.uri);
+        if (!document) return TinyPHP.getCompletionItems();
+        let text = document.getText();
+        let offset = document.offsetAt(textDocumentPosition.position);
+        let wordStart = offset;
+        while (wordStart > 0 && /[\w$#]/.test(text[wordStart - 1])) {
+            wordStart--;
+        }
+        let prefix = text.substring(wordStart, offset);
+        return TinyPHP.getCompletionItems(prefix);
     }
 );
 
 connection.onCompletionResolve(
     (item: CompletionItem): CompletionItem => {
-        // Add documentation to resolved items
         if (item.data === 'function') {
             let doc = TinyPHP.getFunctionDocumentation(item.label);
             if (doc) {
-                item.documentation = {
-                    kind: MarkupKind.Markdown,
-                    value: doc
-                };
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
             }
-        }
-        if (item.data === 'keyword') {
+        } else if (item.data === 'keyword') {
             let doc = TinyPHP.getKeywordDocumentation(item.label);
             if (doc) {
-                item.documentation = {
-                    kind: MarkupKind.Markdown,
-                    value: doc
-                };
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
+            }
+        } else if (item.data === 'c-interop') {
+            let doc = TinyPHP.getCInteropDocumentation(item.label);
+            if (doc) {
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
+            }
+        } else if (item.data === 'preprocessor') {
+            let doc = TinyPHP.getPreprocessorDocumentation(item.label);
+            if (doc) {
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
+            }
+        } else if (item.data === 'type') {
+            let doc = TinyPHP.getTypeDocumentation(item.label);
+            if (doc) {
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
             }
         }
         return item;

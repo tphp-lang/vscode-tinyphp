@@ -1,0 +1,49 @@
+// TinyPHP diagnostic regression test
+// Each block should produce a specific diagnostic after our fixes.
+
+class Main
+{
+    public function main(): void
+    {
+        // Bug 1: yield detection — should produce Error
+        $gen = yield 42;
+
+        // Bug 2: magic methods — each should produce Error with correct range
+        // __call: 6 chars, __get: 5 chars, __set: 5 chars, __callStatic: 12 chars
+
+        // Bug 3: nullable types — should produce Error with full range
+        $a = null;  // ?int not shown inline, but see param below
+
+        // Bug 4: untyped parameters — should produce Warning
+        // (test via functions below)
+
+        // Bug 5: Reflection — should produce Error with full class name range
+        $r = new ReflectionClass($this);
+    }
+
+    // Untyped param should trigger Warning, typed should NOT
+    public function goodFunc(int $x, string $y): void {}
+
+    public function badFunc($x, $y): void {}
+
+    // Nullable type in parameter — Error with full range covering ?int
+    public function nullableParam(?int $val): void {}
+
+    // Magic methods — each should highlight the correct name
+    public function __call(string $name, array $args): mixed { return null; }
+    public function __get(string $name): mixed { return null; }
+    public function __set(string $name, mixed $val): void {}
+    public static function __callStatic(string $name, array $args): mixed { return null; }
+
+    // Reflection with longer class name
+    public function useReflection(): void
+    {
+        $method = new ReflectionMethod($this, 'main');
+    }
+
+    // yield in different context
+    public function gen(): void
+    {
+        return yield 1;
+    }
+}
