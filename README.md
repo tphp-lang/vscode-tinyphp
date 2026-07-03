@@ -41,7 +41,7 @@ VS Code IDE 插件，为 TinyPHP 语言提供全面的开发体验支持。
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/vscode-tinyphp.git
+git clone https://github.com/tphp-lang/vscode-tinyphp.git
 cd vscode-tinyphp
 
 # 安装依赖
