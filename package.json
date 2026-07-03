@@ -4,6 +4,10 @@
     "description": "TinyPHP language support for Visual Studio Code — syntax highlighting, diagnostics, autocomplete, and code navigation",
     "version": "0.1.0",
     "publisher": "tinyphp",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tinyphp/vscode-tinyphp"
+    },
     "license": "MIT",
     "engines": {
         "vscode": "^1.85.0"
@@ -24,18 +28,6 @@
     ],
     "icon": "images/tinyphp-icon.png",
     "main": "./lib/extension.js",
-    "files": [
-        "/lib",
-        "/images",
-        "/syntaxes",
-        "/server",
-        "/snippets",
-        "/language-configuration.json",
-        "/CHANGELOG.md",
-        "/README.md",
-        "/LICENSE.txt",
-        "/package.json"
-    ],
     "extensionKind": [
         "workspace"
     ],

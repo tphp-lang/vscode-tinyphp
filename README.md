@@ -145,4 +145,4 @@ vscode-tinyphp/
 
 ## 许可证
 
-MIT License — 详见 [LICENSE.txt](LICENSE.txt)
+MIT License
