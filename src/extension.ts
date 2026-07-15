@@ -4,9 +4,11 @@ import * as path from 'path';
 import {
     ExtensionContext, window, commands
 } from 'vscode';
+import { createMiddleware } from './middleware';
 
 let client: any;
 let extCtx: ExtensionContext;
+let middleware: ReturnType<typeof createMiddleware> | null = null;
 
 export async function activate(ctx: ExtensionContext) {
     extCtx = ctx;
@@ -14,6 +16,8 @@ export async function activate(ctx: ExtensionContext) {
     // Dynamic require to avoid static import initialization issues
     const { LanguageClient, TransportKind, RevealOutputChannelOn } =
         require('vscode-languageclient/node');
+
+    middleware = createMiddleware();
 
     const serverModule = ctx.asAbsolutePath(path.join('server', 'out', 'server.js'));
     const serverOptions = {
@@ -26,7 +30,8 @@ export async function activate(ctx: ExtensionContext) {
             { language: 'tinyphp', scheme: 'untitled' }
         ],
         initializationOptions: { storagePath: ctx.storagePath },
-        revealOutputChannelOn: RevealOutputChannelOn.Never
+        revealOutputChannelOn: RevealOutputChannelOn.Never,
+        middleware: middleware
     };
 
     client = new LanguageClient('tinyphp', 'TinyPHP', serverOptions, clientOptions);
@@ -53,7 +58,8 @@ async function restart() {
             { language: 'tinyphp', scheme: 'untitled' }
         ],
         initializationOptions: { storagePath: extCtx.storagePath },
-        revealOutputChannelOn: RevealOutputChannelOn.Never
+        revealOutputChannelOn: RevealOutputChannelOn.Never,
+        middleware: middleware || undefined
     });
     extCtx.subscriptions.push(client);
     await client.start();
@@ -62,4 +68,5 @@ async function restart() {
 
 export async function deactivate() {
     if (client) await client.stop();
+    if (middleware) middleware.dispose();
 }

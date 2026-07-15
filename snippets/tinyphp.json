@@ -228,5 +228,242 @@
         "prefix": "#debug",
         "body": "#debug ${1:message}",
         "description": "Preprocessor debug"
+    },
+    "#cstruct": {
+        "prefix": "#cstruct",
+        "body": [
+            "#cstruct ${1:Point} {",
+            "\tC.${2:double} ${3:x};",
+            "\tC.${4:double} ${5:y};",
+            "}"
+        ],
+        "description": "C struct declaration (TinyPHP extension)"
+    },
+    "Property Hook (get/set)": {
+        "prefix": "prophook",
+        "body": [
+            "public ${1:string} \\$${2:name} {",
+            "\tget => ${3:strtoupper}(\\$this->${2:name});",
+            "\tset => ${4:strtolower}(\\$value);",
+            "}"
+        ],
+        "description": "Property Hook (PHP 8.4 + TinyPHP): compiled to getter/setter methods"
+    },
+    "Property Hook (block body)": {
+        "prefix": "prophookb",
+        "body": [
+            "public ${1:string} \\$${2:name} {",
+            "\tget {",
+            "\t\treturn \\$this->${2:name};",
+            "\t}",
+            "\tset {",
+            "\t\t\\$this->${2:name} = \\$value;",
+            "\t}",
+            "}"
+        ],
+        "description": "Property Hook with block body"
+    },
+    "Arrow function (block body)": {
+        "prefix": "fnb",
+        "body": "fn(\\$${1:x}): ${2:void} => {\\n\\t${0}\\n}",
+        "description": "Arrow function with block body (TinyPHP extension, must end with return)"
+    },
+    "Arrow function (typed)": {
+        "prefix": "fnt",
+        "body": "fn(${1:int} \\$${2:x}): ${3:int} => ${0:expr}",
+        "description": "Arrow function with typed params and return type (TinyPHP requires both)"
+    },
+    "Pipe operator": {
+        "prefix": "pipe",
+        "body": "\\$${1:x} |> ${2:f}(${0:...})",
+        "description": "Pipe operator (TinyPHP extension, PHP 8.4 RFC). Use ... as placeholder"
+    },
+    "Pipe chain": {
+        "prefix": "pipechain",
+        "body": "\\$${1:x}\n\t|> ${2:f1}(...)\n\t|> ${3:f2}(...)",
+        "description": "Chained pipe operators"
+    },
+    "Spread array": {
+        "prefix": "spread",
+        "body": "[...\\$${1:arr1}, ...\\$${2:arr2}]",
+        "description": "Array spread/unpack (PHP 7.4+)"
+    },
+    "Generator function": {
+        "prefix": "gen",
+        "body": [
+            "function ${1:gen}(${2:params}): Generator",
+            "{",
+            "\t${3:foreach (\\$${4:items} as \\$${5:item}) {",
+            "\t\tyield \\$${5:item};",
+            "\t}}",
+            "\t${0:return ${6:null};}",
+            "}"
+        ],
+        "description": "Generator function using yield (supported via minicoro)"
+    },
+    "yield value": {
+        "prefix": "yield",
+        "body": "yield ${0:value};",
+        "description": "yield a value from generator"
+    },
+    "yield key => value": {
+        "prefix": "yieldkv",
+        "body": "yield ${1:key} => ${0:value};",
+        "description": "yield key-value pair"
+    },
+    "yield from": {
+        "prefix": "yieldfrom",
+        "body": "yield from ${0:subgen};",
+        "description": "yield from sub-generator or array"
+    },
+    "defer expression": {
+        "prefix": "defer",
+        "body": "defer ${1:C->free}(${2:\\$buf});",
+        "description": "defer expression — Zig-style scope cleanup, expands at compile time to all return paths (LIFO order)"
+    },
+    "defer echo": {
+        "prefix": "deferecho",
+        "body": "defer echo ${0:\"done\\n\"};",
+        "description": "defer echo — debug output at function exit"
+    },
+    "defer block": {
+        "prefix": "deferblock",
+        "body": [
+            "defer {",
+            "\t${1:// cleanup code}",
+            "}"
+        ],
+        "description": "defer block — multi-statement cleanup, LIFO execution at function exit"
+    },
+    "Annotation declaration": {
+        "prefix": "attrd",
+        "body": [
+            "#[Attribute(${1:name}: ${2:string})]",
+            "const ${3:ROUTE} = [];"
+        ],
+        "description": "Annotation type declaration (TinyPHP extension)"
+    },
+    "Annotation usage": {
+        "prefix": "attr",
+        "body": "#[${1:ROUTE}(\"${2:/path}\")]",
+        "description": "Annotation usage on class/method/function (positional args only)"
+    },
+    "Export attribute": {
+        "prefix": "export",
+        "body": "#[Export(\"${1:c_function_name}\")]\nfunction ${2:phpFunc}(${3:params}): ${4:retType}\n{\n\t${0}\n}",
+        "description": "#[Export] attribute for DLL export (-shared mode)"
+    },
+    "Annotation call": {
+        "prefix": "attrcall",
+        "body": "${1:ROUTE}[0]->call(${0:args});",
+        "description": "Call annotation target via AnnotationEntry->call()"
+    },
+    "Annotation newInstance": {
+        "prefix": "attrnew",
+        "body": "\\$${1:obj} = ${2:ROUTE}[0]->newInstance(${0:args});",
+        "description": "Instantiate annotation class via AnnotationEntry->newInstance()"
+    },
+    "Static local variable": {
+        "prefix": "staticvar",
+        "body": "static ${1:int} \\$${2:counter} = ${3:0};",
+        "description": "Static local variable declaration"
+    },
+    "Heredoc string": {
+        "prefix": "heredoc",
+        "body": [
+            "<<<${1:EOT}",
+            "${2:content with \\$var interpolation}",
+            "${1:EOT};"
+        ],
+        "description": "Heredoc string (supports $var and {$obj->prop} interpolation)"
+    },
+    "Nowdoc string": {
+        "prefix": "nowdoc",
+        "body": [
+            "<<<'${1:EOT}'",
+            "${2:literal content no interpolation}",
+            "${1:EOT};"
+        ],
+        "description": "Nowdoc string (no interpolation)"
+    },
+    "error() throw": {
+        "prefix": "error",
+        "body": "error(\"${1:message}\");${0}",
+        "description": "error($msg) — equivalent to throw new Exception($msg)"
+    },
+    "Type|Exception return type": {
+        "prefix": "throws",
+        "body": ": ${1:int}|Exception",
+        "description": "Type|Exception return type (required for functions containing throw/error())"
+    },
+    "c_void_ptr cast": {
+        "prefix": "cvptr",
+        "body": "c_void_ptr(${0:expr})",
+        "description": "PHP to C void* passthrough"
+    },
+    "php_str_clone": {
+        "prefix": "phpstrc",
+        "body": "php_str_clone(${0:expr})",
+        "description": "C char* to PHP string (deep copy)"
+    },
+    "phpc_auto (auto-managed C pointer)": {
+        "prefix": "phpcauto",
+        "body": "phpc_auto(${0:ptr})",
+        "description": "Auto-register C pointer for automatic free on scope exit/exception"
+    },
+    "phpc_free": {
+        "prefix": "phpcfree",
+        "body": "phpc_free(${0:ptr})",
+        "description": "Free C pointer + unregister + zero variable (prevents UAF)"
+    },
+    "phpc_assert_ptr": {
+        "prefix": "phpcassert",
+        "body": "phpc_assert_ptr(${0:ptr}, \"${1:name}\")",
+        "description": "Assert pointer is non-NULL, else throw tp_throw"
+    },
+    "use function": {
+        "prefix": "usefn",
+        "body": "use function ${1:App\\\\Utils}\\\\${2:helper};${0}",
+        "description": "use function import"
+    },
+    "use const": {
+        "prefix": "useconst",
+        "body": "use const ${1:App}\\\\${2:CONFIG};${0}",
+        "description": "use const import"
+    },
+    "use function group": {
+        "prefix": "usefngroup",
+        "body": "use function ${1:App}\\\\Utils\\\\{${2:helper1}, ${3:helper2}};${0}",
+        "description": "use function group import"
+    },
+    "Type cast": {
+        "prefix": "cast",
+        "body": "(${1:int}) ${0:expr}",
+        "description": "Type cast: (int)/(float)/(string)/(bool)"
+    },
+    "C type cast": {
+        "prefix": "ccast",
+        "body": "(C.${1:int}) ${0:expr}",
+        "description": "C type cast: (C.int), (C.void*), (C.Point*)"
+    },
+    "Type annotation (local var)": {
+        "prefix": "vdecl",
+        "body": "${1:int} \\$${2:var} = ${0:0};",
+        "description": "Local variable with optional type annotation (TinyPHP)"
+    },
+    "Type annotation (global const)": {
+        "prefix": "cdecl",
+        "body": "const ${1:int} ${2:MAX} = ${0:100};",
+        "description": "Global/namespace constant with optional type (auto-deduction if omitted)"
+    },
+    "Thread class": {
+        "prefix": "thread",
+        "body": [
+            "Thread::create(function(): void {",
+            "\t${0:// thread body}",
+            "});"
+        ],
+        "description": "Create a new Thread (tinycthread wrapper, Thread-Local runtime)"
     }
 }
+

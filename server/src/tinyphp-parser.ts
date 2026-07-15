@@ -81,9 +81,20 @@ const keywordDocs: Record<string, KeywordDoc> = {
     'unset': { description: '销毁变量', category: 'Built-in' },
     'exit': { description: '终止程序: exit($code)', category: 'Built-in' },
     'die': { description: 'exit() 别名', category: 'Built-in' },
-    'error': { description: '触发错误', category: 'Built-in' },
+    'error': { description: '触发异常: error($msg) 等价于 throw new Exception($msg)，可被 try-catch 捕获', category: 'Built-in' },
     'eval': { description: '❌ TinyPHP 不支持 eval() — AOT 无运行时解释器', category: 'Unsupported' },
-    'yield': { description: '❌ TinyPHP 不支持 yield/Generator', category: 'Unsupported' },
+    'yield': { description: '✅ 生成器: yield $v / yield $k => $v / yield from $gen。基于 minicoro stackless 协程', category: 'Generator' },
+    'Generator': { description: '✅ 生成器类型。方法: current/key/next/send/getReturn/throw。函数含 yield 自动返回 Generator', category: 'Generator' },
+    'Thread': { description: '🔧 多线程类 (tinycthread 封装,Thread-Local 运行时无锁竞争)。Thread::create/join', category: 'Concurrency' },
+    'Mutex': { description: '🔧 互斥锁类 (tinycthread 封装)', category: 'Concurrency' },
+    'CondVar': { description: '🔧 条件变量类 (tinycthread 封装)', category: 'Concurrency' },
+    'WaitGroup': { description: '🔧 WaitGroup (类似 Go,等待一组线程完成)', category: 'Concurrency' },
+    'Parallel': { description: '🔧 数据并行类: Parallel::for / Parallel::map (连续分片,线程失败降级内联)', category: 'Concurrency' },
+    'Resource': { description: '✅ 资源基类 (handle/type/ptr 字段,模拟 PHP zend_resource)', category: 'OOP' },
+    'File': { description: '✅ 文件类 (extends Resource,替代 PHP fopen resource,RAII 自动 fclose)', category: 'OOP' },
+    'Exception': { description: '✅ 异常基类。子类沿父链匹配,catch(Exception $e) 捕获所有', category: 'Exception' },
+    'DIRECTORY_SEPARATOR': { description: '编译期替换为平台路径分隔符 (/ 或 \\)', category: 'Constant' },
+    'C': { description: '🔧 C 互操作命名空间: C->func() 调用 / C.Type 类型注解 / (C.Type) 强制转换', category: 'C Interop' },
 };
 
 // ============================================================================
@@ -977,7 +988,7 @@ const functionDocs: Record<string, FuncDoc> = {
     'date': { description: '格式化时间戳为日期字符串', signature: 'date(string $format, int $timestamp = 0): string', params: [{ name: '$format', description: '日期格式' }, { name: '$timestamp', description: '时间戳（可选）' }], returnType: 'string' },
     'sleep': { description: '暂停指定秒数', signature: 'sleep(int $seconds): int', params: [{ name: '$seconds', description: '秒数' }], returnType: 'int' },
     'usleep': { description: '暂停指定微秒数', signature: 'usleep(int $microseconds): void', params: [{ name: '$microseconds', description: '微秒数' }], returnType: 'void' },
-    'hrtime': { description: '高精度时间（纳秒级）', signature: 'hrtime(bool $asNumber = false): array|int', params: [{ name: '$asNumber', description: '是否返回整数纳秒' }], returnType: 'array|int' },
+    'hrtime': { description: '高精度时间（纳秒级，返回单个纳秒整数）', signature: 'hrtime(): int', params: [], returnType: 'int' },
     'microtime': { description: '返回当前时间（浮点秒）', signature: 'microtime(): float', params: [], returnType: 'float' },
     'mktime': { description: '从日期时间组件创建时间戳', signature: 'mktime(int $hour, int $minute, int $second, int $month, int $day, int $year): int', params: [{ name: '$hour', description: '小时' }, { name: '$minute', description: '分钟' }, { name: '$second', description: '秒' }, { name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
     'strtotime': { description: '解析日期字符串为时间戳', signature: 'strtotime(string $datetime): int', params: [{ name: '$datetime', description: '日期字符串（Y-m-d H:i:s）' }], returnType: 'int' },
@@ -1018,27 +1029,41 @@ const functionDocs: Record<string, FuncDoc> = {
 // ============================================================================
 
 const cInteropDocs: Record<string, string> = {
-    'c_int': '**c_int(expr)** → int32_t\n将 PHP int 转换为 C int32_t',
-    'c_float': '**c_float(expr)** → double\n将 PHP float 转换为 C double',
-    'c_str': '**c_str(expr)** → const char*\n将 PHP string 转换为 C 字符串指针',
-    'php_int': '**php_int(expr)** → t_int\n将 C int 转换为 PHP int',
-    'php_float': '**php_float(expr)** → t_float\n将 C double 转换为 PHP float',
-    'php_str': '**php_str(expr)** → t_string\n将 C 字符串（深拷贝）转换为 PHP string',
-    'phpc_arr_int': '**phpc_arr_int(t_array*)** → int32_t*\n数组 → C int 数组（malloc）',
-    'phpc_arr_dbl': '**phpc_arr_dbl(t_array*)** → double*\n数组 → C double 数组（malloc）',
-    'phpc_arr_str': '**phpc_arr_str(t_array*)** → char**\n数组 → C 字符串数组（malloc）',
+    'c_int': '**c_int(expr)** → int32_t (宏,零开销)\n将 PHP int 转换为 C int32_t',
+    'c_float': '**c_float(expr)** → double (宏,零开销)\n将 PHP float 转换为 C double',
+    'c_str': '**c_str(expr)** → const char* (static inline,STR_PTR 单次求值)\n将 PHP string 转换为 C 字符串指针',
+    'c_void_ptr': '**c_void_ptr(expr)** → void* (宏,显式类型标记)\n透传任意指针类型',
+    'php_int': '**php_int(expr)** → t_int (宏,零开销)\n将 C int 转换为 PHP int',
+    'php_float': '**php_float(expr)** → t_float (宏,零开销)\n将 C double 转换为 PHP float',
+    'php_str': '**php_str(expr)** → t_string (static inline,深拷贝)\n将 C 字符串（const char*）转换为 PHP string',
+    'php_str_ptr': '**php_str_ptr(expr)** → t_string (宏,接受 void*)\n等价于 php_str',
+    'php_str_clone': '**php_str_clone(expr)** → t_string (宏,深拷贝)\n同 php_str,语义化命名',
+    'phpc_arr_int': '**phpc_arr_int(t_array*)** → int32_t* (malloc)\n数组 → C int 数组；类型不匹配抛 tp_throw',
+    'phpc_arr_dbl': '**phpc_arr_dbl(t_array*)** → double* (malloc)\n数组 → C double 数组；类型不匹配抛 tp_throw',
+    'phpc_arr_str': '**phpc_arr_str(t_array*)** → char** (malloc)\n数组 → C 字符串数组；类型不匹配抛 tp_throw',
     'phpc_new_arr_int': '**phpc_new_arr_int(ptr, len)** → t_array*\nC int 数组 → PHP 数组',
     'phpc_new_arr_dbl': '**phpc_new_arr_dbl(ptr, len)** → t_array*\nC double 数组 → PHP 数组',
     'phpc_new_arr_str': '**phpc_new_arr_str(ptr, len)** → t_array*\nC 字符串数组 → PHP 数组',
     'phpc_new_arr': '**phpc_new_arr()** → t_array*\n创建空 PHP 数组',
-    'phpc_obj': '**phpc_obj(t_object*)** → void*\n获取对象原始指针',
-    'phpc_new_obj': '**phpc_new_obj(ptr, class)** → t_object*\n包装 C 指针为对象',
-    'phpc_fn': '**phpc_fn(callback)** → void*\n获取回调函数指针',
-    'phpc_env': '**phpc_env(callback)** → void*\n获取回调环境指针',
-    'phpc_fn_i32': '**phpc_fn_i32(callback)** → int32_t(*)(int32_t, void*)\n获取回调函数指针（int32_t 签名）',
-    'phpc_thunk': '**phpc_thunk(name, callback)** → void\n按 #callback 签名生成 thunk',
-    'phpc_free': '**phpc_free(ptr)** → void\n释放 C malloc 内存',
-    'phpc_free_str_arr': '**phpc_free_str_arr(ptr, len)** → void\n释放字符串数组',
+    'phpc_obj': '**phpc_obj(t_object*)** → void* (借用语义)\n获取对象原始指针',
+    'phpc_new_obj': '**phpc_new_obj(ptr, cls)** → t_object* (接管语义)\n包装 C 指针为对象（接管所有权）',
+    'phpc_unregister_obj': '**phpc_unregister_obj(obj)** → void\n解除注册，防 double-free',
+    'phpc_obj_steal': '**phpc_obj_steal(obj)** → void\n标记分离，C 库可安全 free',
+    'phpc_fn': '**phpc_fn(cb)** → void*\n获取回调函数指针',
+    'phpc_env': '**phpc_env(cb)** → void*\n获取回调环境指针',
+    'phpc_fn_i32': '**phpc_fn_i32(cb)** → int32_t(*)(int32_t, void*)\n获取 int32_t 签名回调',
+    'phpc_fn_i64': '**phpc_fn_i64(cb)** → int64_t(*)(int64_t, void*)\n获取 int64_t 签名回调',
+    'phpc_fn_f64': '**phpc_fn_f64(cb)** → double(*)(double, void*)\n获取 double 签名回调',
+    'phpc_thunk': '**phpc_thunk(name, cb)** → void\n按 #callback 签名生成 thunk',
+    'phpc_env_pin': '**phpc_env_pin(cb)** → void*\n固定 env，异步回调安全',
+    'phpc_env_unpin': '**phpc_env_unpin(env)** → void\n解除固定',
+    'phpc_auto': '**phpc_auto(ptr)** → void* (通用 C 指针自动注册)\n程序结束/异常自动 free',
+    'phpc_free': '**phpc_free(ptr)** → void\nfree(ptr) + 注销注册防 double-free + 自动置零变量防 UAF',
+    'phpc_free_str_arr': '**phpc_free_str_arr(p, len)** → void\n释放字符串数组 + 自动置零',
+    'phpc_assert_ptr': '**phpc_assert_ptr(p, name)** → void\n断言非 NULL，否则抛 tp_throw',
+    'phpc_ptr_to_int': '**phpc_ptr_to_int(ptr)** → t_int\nvoid* → t_int (用 intptr_t 保证可移植性)',
+    'phpc_int_to_ptr': '**phpc_int_to_ptr(v)** → void*\nt_int → void* (函数内部转回调用 C 库)',
+    'defer': '**defer EXPR;** / **defer echo STMT;** / **defer { ... }** — Zig 风格作用域清理\n\n注册清理代码，在函数退出时按 LIFO（后进先出）顺序执行。\n\n**函数级作用域**：PHP 无块作用域，defer 为函数级（非块级）。所有 defer 在函数退出时统一执行。\n**编译期展开**：defer 代码在编译期展开到所有 `return` 点和 fall-through 尾部，**零运行时开销**。\n**return 路径**：先求值 return 表达式到临时变量 `__defer_ret`，执行 defer 清理，再返回临时变量（避免 use-after-free）。\n**异常路径限制**：`try-catch` 的 `longjmp` 路径**不执行** defer。如需异常路径清理，请在 `finally` 块中手动处理。\n\n**典型用途**：\n- C 指针释放：`defer C->free($buf);`\n- 资源关闭：`defer C->fclose($fp);`\n- 调试输出：`defer echo "exit\\n";`\n- 多语句清理：`defer { C->free($a); C->free($b); }`',
 };
 
 // ============================================================================
@@ -1049,8 +1074,34 @@ const preprocessorDocs: Record<string, string> = {
     '#include': '**#include [OS] "file.h"** 或 **#include [OS] <sys.h>**\n\n嵌入 C 头文件到生成的 C 代码中。\n\n**可选平台前缀**: `Windows`, `Linux`, `MacOS`, `Darwin`\n\n示例:\n- `#include "common.h"` — 所有平台\n- `#include Windows "win.h"` — 仅 Windows\n- `#include Linux <sys/io.h>` — 仅 Linux',
     '#flag': '**#flag [GCC|Clang|TCC] [Windows|Linux|MacOS|Darwin] -D... -l...**\n\n编译器/平台过滤的编译和链接标志。最多两个前缀（编译器+平台，顺序不限）。\n\n示例:\n- `#flag -O2 -lm` — 所有平台\n- `#flag GCC -D_GNU_SOURCE` — 仅 GCC\n- `#flag Clang Linux -fsanitize=address` — Clang + Linux',
     '#callback': '**#callback ret_type name(params)**\n声明 C 回调函数签名，供 `phpc_thunk` 生成 thunk 使用。\n\n示例: `#callback void on_event(int $code)`',
-    '#import': '**#import name**\n按需引入扩展（自动加载 ext/name/src/*.php + *.c）\n\n示例: `#import pcntl`',
+    '#import': '**#import name**\n按需引入扩展（自动加载 ext/name/src/*.php + *.c）\n\n**可用扩展**: `pcntl` (POSIX 进程控制), `posix` (POSIX 系统), `pcre` (正则表达式), `exif` (EXIF 元数据)\n\n示例: `#import pcntl`',
+    '#cstruct': '**#cstruct Name { C.type field; ... }**\n声明 C 结构体字段布局。`$p->field` 编译期展开为 `((Name*)$p)->field`，无需 C getter/setter。\n\n**字段格式**: `C.type name` 或 `StructName name`（嵌套值类型）\n\n示例:\n```\n#cstruct Point {\n    C.double x;\n    C.double y;\n}\n```',
     '#debug': '**#debug text**\n仅在 --debug 模式下输出（用于测试预期输出）\n\n`#debug ~ text` — 近似匹配（时间/时区相关）',
+};
+
+// ============================================================================
+// C 类型注解文档（C.Type 命名空间，借鉴 vlang 设计）
+// ============================================================================
+
+const cTypeDocs: Record<string, string> = {
+    'C.int': '**C.int** → `int`\nC int 类型注解',
+    'C.double': '**C.double** → `double`\nC double 类型注解',
+    'C.float': '**C.float** → `float`\nC float 类型注解',
+    'C.char': '**C.char** → `char`\nC char 类型注解',
+    'C.bool': '**C.bool** → `bool`\nC bool 类型注解',
+    'C.void': '**C.void** → `void`\nC void 类型注解',
+    'C.int8': '**C.int8** → `int8_t`\n8 位有符号整数',
+    'C.int16': '**C.int16** → `int16_t`\n16 位有符号整数',
+    'C.int32': '**C.int32** → `int32_t`\n32 位有符号整数',
+    'C.int64': '**C.int64** → `int64_t`\n64 位有符号整数',
+    'C.uint8': '**C.uint8** → `uint8_t`\n8 位无符号整数',
+    'C.uint16': '**C.uint16** → `uint16_t`\n16 位无符号整数',
+    'C.uint32': '**C.uint32** → `uint32_t`\n32 位无符号整数',
+    'C.uint64': '**C.uint64** → `uint64_t`\n64 位无符号整数',
+    'C.size_t': '**C.size_t** → `size_t`\nC size_t 类型',
+    'C.void*': '**C.void*** → `void*`\nC void 指针（用 * 后缀表示指针）',
+    'C.char*': '**C.char*** → `char*`\nC 字符串指针',
+    'C.int*': '**C.int*** → `int*`\nC int 指针',
 };
 
 // ============================================================================
@@ -1059,20 +1110,30 @@ const preprocessorDocs: Record<string, string> = {
 
 export const unsupportedFeatures: Record<string, string> = {
     'eval': 'eval() 不被 TinyPHP 支持 — AOT 编译无运行时解释器',
-    'yield': 'yield/Generator 不被 TinyPHP 支持',
     'include': 'include/require 不被 TinyPHP 支持 — 使用 #include 预处理器指令',
     'require': 'include/require 不被 TinyPHP 支持 — 使用 #include 预处理器指令',
     '__call': '魔术方法 __call 不被 TinyPHP 支持 — 无动态分发',
     '__get': '魔术方法 __get 不被 TinyPHP 支持 — 无动态分发',
     '__set': '魔术方法 __set 不被 TinyPHP 支持 — 无动态分发',
     '__callStatic': '魔术方法 __callStatic 不被 TinyPHP 支持 — 无动态分发',
+    '__toString': '__toString 不被 TinyPHP 支持 — 需运行时动态分发',
+    '__invoke': '__invoke 不被 TinyPHP 支持 — 需运行时动态分发',
+    '__clone': 'clone/__clone 不被 TinyPHP 支持 — COS 对象无通用深拷贝',
+    '__debugInfo': '__debugInfo 不被 TinyPHP 支持',
+    '__sleep': '__sleep/__wakeup 不被 TinyPHP 支持 — 需运行时序列化支持',
+    '__wakeup': '__sleep/__wakeup 不被 TinyPHP 支持 — 需运行时序列化支持',
+    '__serialize': '__serialize/__unserialize 不被 TinyPHP 支持',
+    '__unserialize': '__serialize/__unserialize 不被 TinyPHP 支持',
+    '__isset': '__isset/__unset 不被 TinyPHP 支持 — 无动态分发',
+    '__unset': '__isset/__unset 不被 TinyPHP 支持 — 无动态分发',
+    '__set_state': '__set_state 不被 TinyPHP 支持',
     'assert': 'assert($str) 不被 TinyPHP 支持 — 使用 assert_true/assert_false 系列',
     'create_function': 'create_function() 不被 TinyPHP 支持 — AOT 无运行时解释器',
     'compact': 'compact() 不被 TinyPHP 支持 — 无运行时符号表',
     'extract': 'extract() 不被 TinyPHP 支持 — 无运行时符号表',
     'debug_backtrace': 'debug_backtrace() 不被 TinyPHP 支持 — 无运行时调用栈',
     'get_defined_vars': 'get_defined_vars() 不被 TinyPHP 支持 — 无运行时符号表',
-    'func_get_args': 'func_get_args() 不被 TinyPHP 支持 — 使用 ...$args 可变参数（也不支持）',
+    'func_get_args': 'func_get_args() 不被 TinyPHP 支持（定参函数）— 可变参数函数 ...$args 中可用',
     'call_user_func': 'call_user_func() 不被 TinyPHP 支持 — 编译时不知函数名',
     'call_user_func_array': 'call_user_func_array() 不被 TinyPHP 支持',
     'set_error_handler': 'set_error_handler() 不被 TinyPHP 支持 — 无运行时错误处理器',
@@ -1082,6 +1143,14 @@ export const unsupportedFeatures: Record<string, string> = {
     'ReflectionMethod': 'Reflection API 不被 TinyPHP 支持',
     'ReflectionProperty': 'Reflection API 不被 TinyPHP 支持',
     'ReflectionFunction': 'Reflection API 不被 TinyPHP 支持',
+    'clone': 'clone 关键字不被 TinyPHP 支持 — 需 __clone 动态分发',
+    'declare': 'declare() 在 TinyPHP 中无意义 — AOT 已是强类型',
+    '??=': '??= 不被 TinyPHP 实现 — 使用 $a = $a ?? $b 展开',
+    'Throwable': 'catch (Throwable $e) 不被 TinyPHP 支持 — Throwable 是接口无 vtable,使用 catch (Exception $e)',
+    'Closure::bind': 'Closure::bind/bindTo/call/fromCallable 不被 TinyPHP 支持 — 闭包作用域编译期固定',
+    'Closure::call': 'Closure::call 不被 TinyPHP 支持',
+    'Closure::fromCallable': 'Closure::fromCallable 不被 TinyPHP 支持',
+    '__COMPILER_HALT_OFFSET__': '__COMPILER_HALT_OFFSET__ 不被 TinyPHP 支持 — 无运行时文件加载',
 };
 
 // ============================================================================
@@ -1114,10 +1183,21 @@ function buildCompletionItems(): CompletionItem[] {
                 : name === '#flag' ? '#flag ${1|,GCC ,Clang ,TCC ,Windows ,Linux ,MacOS ,Darwin |}${2:-Dflag}'
                 : name === '#callback' ? '#callback ${1:type} ${2:name}(${3:params})'
                 : name === '#import' ? '#import ${1:module}'
+                : name === '#cstruct' ? '#cstruct ${1:Name} {\n\tC.${2:double} ${3:field};\n}'
                 : name === '#debug' ? '#debug ${1:message}'
                 : name,
             insertTextFormat: InsertTextFormat.Snippet,
             data: 'preprocessor'
+        });
+    }
+
+    // ---- C 类型注解 (C.Type) ----
+    for (let [name, doc] of Object.entries(cTypeDocs)) {
+        items.push({
+            label: name,
+            kind: CompletionItemKind.TypeParameter,
+            detail: 'TinyPHP C Type',
+            data: 'c-type'
         });
     }
 
@@ -1530,8 +1610,21 @@ export function getCInteropDocumentation(name: string): string | null {
     return cInteropDocs[name] || null;
 }
 
+export function getCTypeDocumentation(name: string): string | null {
+    return cTypeDocs[name] || null;
+}
+
 export function getPreprocessorDocumentation(name: string): string | null {
     return preprocessorDocs[name] || null;
+}
+
+// 获取函数返回类型（用于 Inlay Hint 推导 $x = func() 的类型）
+export function getFunctionReturnType(name: string): string | null {
+    let doc = functionDocs[name];
+    if (!doc) return null;
+    let rt = doc.returnType;
+    if (!rt || rt === 'void' || rt === 'never' || rt === 'mixed') return null;
+    return rt;
 }
 
 export function getFunctionSignature(name: string): SignatureInformation | null {

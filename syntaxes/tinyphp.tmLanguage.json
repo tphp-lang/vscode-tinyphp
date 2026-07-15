@@ -6,6 +6,7 @@
     "patterns": [
         { "include": "#php-tag" },
         { "include": "#preprocessor" },
+        { "include": "#annotations" },
         { "include": "#comments" },
         { "include": "#strings" },
         { "include": "#constants" },
@@ -27,6 +28,7 @@
             "endCaptures": { "0": { "name": "punctuation.section.embedded.end.php" } },
             "patterns": [
                 { "include": "#preprocessor" },
+                { "include": "#annotations" },
                 { "include": "#comments" },
                 { "include": "#strings" },
                 { "include": "#constants" },
@@ -77,11 +79,71 @@
                     }
                 },
                 {
+                    "comment": "#cstruct Name { fields }",
+                    "name": "meta.preprocessor.cstruct.tinyphp",
+                    "begin": "^\\s*(#cstruct)\\s+(\\w+)\\s*\\{",
+                    "end": "\\}",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.control.import.tinyphp" },
+                        "2": { "name": "entity.name.type.struct.tinyphp" }
+                    },
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.section.cstruct.end.tinyphp" }
+                    },
+                    "patterns": [
+                        { "include": "#cstruct-fields" }
+                    ]
+                },
+                {
                     "comment": "#callback / #import / #debug",
                     "name": "meta.preprocessor.tinyphp",
                     "match": "^\\s*(#(?:callback|import|debug))\\b.*$",
                     "captures": {
                         "1": { "name": "keyword.control.import.tinyphp" }
+                    }
+                }
+            ]
+        },
+
+        "cstruct-fields": {
+            "patterns": [
+                {
+                    "comment": "C type field: C.double x or StructName name",
+                    "match": "(C\\.[A-Za-z_][A-Za-z0-9_]*\\**|[A-Za-z_][A-Za-z0-9_]*)\\s+(\\w+)\\s*(;)?",
+                    "captures": {
+                        "1": { "name": "storage.type.c.tinyphp" },
+                        "2": { "name": "variable.other.property.tinyphp" },
+                        "3": { "name": "punctuation.terminator.statement.php" }
+                    }
+                },
+                { "include": "#comments" }
+            ]
+        },
+
+        "annotations": {
+            "patterns": [
+                {
+                    "comment": "#[Attribute(p: type)] const NAME = []; — annotation declaration",
+                    "name": "meta.annotation.declaration.tinyphp",
+                    "match": "^\\s*(#\\[Attribute)\\s*\\(([^)]*)\\)\\s*\\]\\s*(const)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*(\\[\\s*\\])\\s*(;)",
+                    "captures": {
+                        "1": { "name": "entity.name.function.attribute.tinyphp" },
+                        "2": { "name": "string.unquoted.annotation-params.tinyphp" },
+                        "3": { "name": "storage.modifier.php" },
+                        "4": { "name": "entity.name.constant.php" },
+                        "5": { "name": "keyword.operator.assignment.php" },
+                        "6": { "name": "constant.language.array.empty.php" },
+                        "7": { "name": "punctuation.terminator.statement.php" }
+                    }
+                },
+                {
+                    "comment": "#[Name(args)] or #[Name] — annotation usage on class/method/function",
+                    "name": "meta.annotation.usage.tinyphp",
+                    "match": "(#\\[)([A-Za-z_\\\\][A-Za-z0-9_\\\\]*)(?:\\s*\\(([^)]*)\\))?\\]",
+                    "captures": {
+                        "1": { "name": "punctuation.definition.annotation.begin.tinyphp" },
+                        "2": { "name": "entity.name.type.attribute.tinyphp" },
+                        "3": { "name": "string.unquoted.annotation-args.tinyphp" }
                     }
                 }
             ]
@@ -99,16 +161,43 @@
                     }
                 },
                 {
-                    "name": "support.function.c-interop.tinyphp",
-                    "match": "\\b(phpc_arr_int|phpc_arr_dbl|phpc_arr_str|phpc_new_arr_int|phpc_new_arr_dbl|phpc_new_arr_str|phpc_new_arr|phpc_obj|phpc_new_obj|phpc_fn|phpc_env|phpc_fn_i32|phpc_thunk|phpc_free|phpc_free_str_arr)\\s*(?=\\()"
+                    "comment": "C->CONST (no parens) — direct C constant/enum/macro access",
+                    "name": "meta.c-interop-const.tinyphp",
+                    "match": "\\bC\\s*(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\b(?!\\s*\\()",
+                    "captures": {
+                        "1": { "name": "keyword.operator.arrow.tinyphp" },
+                        "2": { "name": "support.constant.c.tinyphp" }
+                    }
+                },
+                {
+                    "comment": "C.Type — C type annotation (C.int, C.double, C.int32, C.void*, C.Point*)",
+                    "name": "storage.type.c.tinyphp",
+                    "match": "\\bC\\.([A-Za-z_][A-Za-z0-9_]*)(\\*+)?",
+                    "captures": {
+                        "1": { "name": "storage.type.c.name.tinyphp" },
+                        "2": { "name": "keyword.operator.pointer.tinyphp" }
+                    }
+                },
+                {
+                    "comment": "(C.Type) cast — C type cast: (C.int)expr, (C.void*)ptr, (C.Point*)p",
+                    "name": "meta.c-interop-cast.tinyphp",
+                    "match": "\\(C\\.([A-Za-z_][A-Za-z0-9_]*)(\\*+)\\)",
+                    "captures": {
+                        "1": { "name": "storage.type.c.name.tinyphp" },
+                        "2": { "name": "keyword.operator.pointer.tinyphp" }
+                    }
                 },
                 {
                     "name": "support.function.c-interop.tinyphp",
-                    "match": "\\b(c_int|c_float|c_str|php_int|php_float|php_str)\\s*(?=\\()"
+                    "match": "\\b(phpc_arr_int|phpc_arr_dbl|phpc_arr_str|phpc_new_arr_int|phpc_new_arr_dbl|phpc_new_arr_str|phpc_new_arr|phpc_obj|phpc_new_obj|phpc_unregister_obj|phpc_obj_steal|phpc_fn|phpc_env|phpc_fn_i32|phpc_fn_i64|phpc_fn_f64|phpc_thunk|phpc_env_pin|phpc_env_unpin|phpc_free|phpc_free_str_arr|phpc_auto|phpc_assert_ptr|phpc_ptr_to_int|phpc_int_to_ptr)\\s*(?=\\()"
+                },
+                {
+                    "name": "support.function.c-interop.tinyphp",
+                    "match": "\\b(c_int|c_float|c_str|c_void_ptr|php_int|php_float|php_str|php_str_ptr|php_str_clone)\\s*(?=\\()"
                 },
                 {
                     "name": "storage.type.c.tinyphp",
-                    "match": "\\b(c_int|c_float|c_str|c_bool|c_void|php_int|php_float|php_str|php_bool)\\b(?!\\s*\\()"
+                    "match": "\\b(c_int|c_float|c_str|c_bool|c_void|php_int|php_float|php_str|php_bool|php_str_ptr|php_str_clone|c_void_ptr)\\b(?!\\s*\\()"
                 }
             ]
         },
@@ -309,11 +398,113 @@
         },
 
         "namespace-paths": {
-            "comment": "Highlight namespace paths in use/namespace statements and fully-qualified names",
+            "comment": "Highlight namespace paths in use/namespace statements and fully-qualified names. Supports group use: use A\\B\\{C, D\\E, F as G}",
             "patterns": [
                 {
-                    "name": "entity.name.type.namespace.php",
-                    "match": "(?<=\\b(namespace|use|use\\s+function|use\\s+const)\\s+)[a-zA-Z_\\x7f-\\xff\\\\][a-zA-Z0-9_\\\\\\x7f-\\xff]*"
+                    "comment": "use function/const A\\B\\{f1, f2 as g}; — grouped function/const import",
+                    "name": "meta.use.group.php",
+                    "begin": "(?i)\\b(use)\\s+(function|const)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)\\\\\\{",
+                    "end": "\\}",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.import.use.php" },
+                        "2": { "name": "storage.modifier.php" },
+                        "3": { "name": "entity.name.type.namespace.php" }
+                    },
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.import.bracket.end.php" }
+                    },
+                    "patterns": [
+                        {
+                            "comment": "member as alias",
+                            "match": "\\b([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)\\s+(as)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
+                            "captures": {
+                                "1": { "name": "entity.name.function.php" },
+                                "2": { "name": "keyword.import.use.php" },
+                                "3": { "name": "entity.name.function.php" }
+                            }
+                        },
+                        {
+                            "comment": "plain member (function or const name)",
+                            "match": "\\b([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)\\b",
+                            "captures": {
+                                "1": { "name": "entity.name.function.php" }
+                            }
+                        },
+                        {
+                            "include": "#comments"
+                        }
+                    ]
+                },
+                {
+                    "comment": "use A\\B\\{C, D\\E, F as G}; — grouped class import",
+                    "name": "meta.use.group.php",
+                    "begin": "(?i)\\b(use)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)\\\\\\{",
+                    "end": "\\}",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.import.use.php" },
+                        "2": { "name": "entity.name.type.namespace.php" }
+                    },
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.import.bracket.end.php" }
+                    },
+                    "patterns": [
+                        {
+                            "comment": "function/const prefix inside group: 'function f' or 'const K'",
+                            "match": "\\b(function|const)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
+                            "captures": {
+                                "1": { "name": "storage.modifier.php" },
+                                "2": { "name": "entity.name.function.php" }
+                            }
+                        },
+                        {
+                            "comment": "ClassName as Alias",
+                            "match": "\\b([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)\\s+(as)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
+                            "captures": {
+                                "1": { "name": "entity.name.type.class.php" },
+                                "2": { "name": "keyword.import.use.php" },
+                                "3": { "name": "entity.name.type.class.php" }
+                            }
+                        },
+                        {
+                            "comment": "plain ClassName (may contain namespace separator \\)",
+                            "match": "\\b([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)\\b",
+                            "captures": {
+                                "1": { "name": "entity.name.type.class.php" }
+                            }
+                        },
+                        {
+                            "include": "#comments"
+                        }
+                    ]
+                },
+                {
+                    "comment": "use function/const A\\B\\f as g; — non-group function/const import",
+                    "match": "(?i)\\b(use)\\s+(function|const)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)(?:\\s+(as)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*))?",
+                    "captures": {
+                        "1": { "name": "keyword.import.use.php" },
+                        "2": { "name": "storage.modifier.php" },
+                        "3": { "name": "entity.name.type.namespace.php" },
+                        "4": { "name": "keyword.import.use.php" },
+                        "5": { "name": "entity.name.function.php" }
+                    }
+                },
+                {
+                    "comment": "use A\\B\\C [as D]; — plain class import with optional alias",
+                    "match": "(?i)\\b(use)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)(?:\\s+(as)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*))?",
+                    "captures": {
+                        "1": { "name": "keyword.import.use.php" },
+                        "2": { "name": "entity.name.type.namespace.php" },
+                        "3": { "name": "keyword.import.use.php" },
+                        "4": { "name": "entity.name.type.class.php" }
+                    }
+                },
+                {
+                    "comment": "namespace A\\B\\C; — namespace declaration",
+                    "match": "(?i)\\b(namespace)\\s+([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*(?:\\\\[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)*)",
+                    "captures": {
+                        "1": { "name": "keyword.namespace.php" },
+                        "2": { "name": "entity.name.type.namespace.php" }
+                    }
                 },
                 {
                     "name": "punctuation.separator.namespace.php",
@@ -324,8 +515,16 @@
         "type-declarations": {
             "patterns": [
                 {
+                    "comment": "catch (Type $e) — exception type in catch clause (supports leading backslash)",
+                    "match": "(?i)\\b(catch)\\s*\\(\\s*\\\\?([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.exception.php" },
+                        "2": { "name": "entity.name.type.class.php" }
+                    }
+                },
+                {
                     "name": "entity.name.type.class.php",
-                    "match": "(?<=\\b(class|interface|trait|enum|extends|implements|new|catch\\s*\\(|instanceof|throw\\s+new|,)\\s*)[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\\\\\x7f-\\xff]*"
+                    "match": "(?<=\\b(class|interface|trait|enum|extends|implements|new|instanceof|throw\\s+new|,)\\s*)[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\\\\\x7f-\\xff]*"
                 },
                 {
                     "name": "entity.name.function.php",
@@ -357,6 +556,23 @@
                     "match": "(?<=[(,]\\s*)((?:int|float|string|bool|array|mixed|object|void|never|callable)|([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*))\\s+(\\$[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
                     "captures": {
                         "1": { "name": "entity.name.type.class.php" },
+                        "3": { "name": "variable.other.php" }
+                    }
+                },
+                {
+                    "comment": "局部变量类型标记: int $x = 42; (TinyPHP 可选类型标记, GRAMMAR.md §7)。类型必须是大写开头的类名或内置类型小写关键字，避免误匹配 echo/return 等控制流关键字",
+                    "match": "^\\s*((?:int|float|string|bool|array|mixed|object|void|never|callable)|(?:[A-Z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*))\\s+(\\$[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
+                    "captures": {
+                        "1": { "name": "entity.name.type.class.php" },
+                        "2": { "name": "variable.other.php" }
+                    }
+                },
+                {
+                    "comment": "静态局部变量类型: static int $x = 0; (类型可选, GRAMMAR.md §7)",
+                    "match": "\\b(static)\\s+((?:int|float|string|bool|array|mixed|object|callable)|(?:[A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*))\\s+(\\$[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
+                    "captures": {
+                        "1": { "name": "storage.modifier.php" },
+                        "2": { "name": "entity.name.type.class.php" },
                         "3": { "name": "variable.other.php" }
                     }
                 },
@@ -394,7 +610,17 @@
             "patterns": [
                 {
                     "name": "keyword.control.php",
-                    "match": "\\b(if|else|elseif|for|while|do|foreach|switch|case|default|break|continue|return|goto|match)\\b"
+                    "match": "\\b(if|else|elseif|for|while|do|foreach|switch|case|default|break|continue|return|goto|match|defer)\\b"
+                },
+                {
+                    "comment": "yield / yield from — Generator keywords (TinyPHP ✅ via minicoro)",
+                    "name": "keyword.control.generator.php",
+                    "match": "\\byield\\s+from\\b|\\byield\\b"
+                },
+                {
+                    "comment": "Property Hook get/set (PHP 8.4, TinyPHP ✅) — only inside property hook block { get => ...; set => ...; }",
+                    "name": "keyword.control.hook.php",
+                    "match": "\\b(get|set)\\b(?=\\s*(?:=>|\\{))"
                 },
                 {
                     "name": "keyword.control.exception.php",
@@ -426,7 +652,12 @@
                 },
                 {
                     "name": "support.function.builtin.tinyphp",
-                    "match": "\\b(var_dump|count|isset|empty|unset|error|time|date|sleep|usleep|hrtime|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable)\\b"
+                    "match": "\\b(var_dump|print_r|count|isset|empty|unset|error|exit|die|time|date|sleep|usleep|hrtime|microtime|mktime|strtotime|uniqid|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable|is_resource|is_numeric|gettype|getenv|putenv|intval|floatval|strval|boolval|abs|round|ceil|floor|sqrt|pow|pi|fmod|deg2rad|rad2deg|intdiv|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|log10|is_finite|is_infinite|is_nan|rand|mt_rand|random_int|random_bytes)\\b"
+                },
+                {
+                    "comment": "TinyPHP built-in classes: Generator / Thread / Mutex / etc.",
+                    "name": "support.class.builtin.tinyphp",
+                    "match": "\\b(Generator|Thread|Mutex|CondVar|WaitGroup|Parallel|Resource|File|Exception)\\b"
                 }
             ]
         },
@@ -445,17 +676,19 @@
         },
 
         "inline": {
-            "comment": "Patterns used inside function call parentheses",
+            "comment": "Patterns used inside function call parentheses (supports nested calls)",
             "patterns": [
                 { "include": "#comments" },
                 { "include": "#strings" },
                 { "include": "#constants" },
                 { "include": "#namespace-paths" },
                 { "include": "#c-interop" },
+                { "include": "#functions" },
                 { "include": "#variables" },
                 { "include": "#numbers" },
                 { "include": "#keywords" },
-                { "include": "#type-declarations" }
+                { "include": "#type-declarations" },
+                { "include": "#operators" }
             ]
         },
         "functions": {
@@ -487,13 +720,28 @@
                     }
                 },
                 {
+                    "comment": "Pipe operator |> (TinyPHP extension, PHP 8.4 RFC)",
+                    "match": "\\|>",
+                    "name": "keyword.operator.pipe.tinyphp"
+                },
+                {
+                    "comment": "nullsafe arrow ?->",
+                    "match": "\\?->",
+                    "name": "keyword.operator.nullsafe.tinyphp"
+                },
+                {
+                    "comment": "spread operator ... (array unpacking)",
+                    "match": "\\.\\.\\.",
+                    "name": "keyword.operator.spread.tinyphp"
+                },
+                {
                     "comment": "reference param: int &$var",
                     "match": "(?<=[\\s(,])&(?=\\$[a-zA-Z_])",
                     "name": "keyword.operator.reference.php"
                 },
                 {
-                    "comment": "label for goto: IDENTIFIER:",
-                    "match": "^\\s*([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)\\s*:(?!:)",
+                    "comment": "label for goto: IDENTIFIER: (excludes control-flow keywords like default:/case:/else:)",
+                    "match": "^\\s*(?!default\\s*:|case\\s*:|else\\s*:)([a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)\\s*:(?!:)",
                     "captures": {
                         "1": { "name": "entity.name.label.php" }
                     }
@@ -509,6 +757,11 @@
                     "name": "keyword.operator.comparison.php"
                 },
                 {
+                    "comment": "coalesce ??",
+                    "match": "\\?\\?",
+                    "name": "keyword.operator.coalesce.php"
+                },
+                {
                     "comment": "power **",
                     "match": "\\*\\*",
                     "name": "keyword.operator.arithmetic.php"
@@ -517,8 +770,22 @@
         },
         "numbers": {
             "patterns": [
-                { "name": "constant.numeric.php", "match": "\\b([0-9]+\\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)\\b" },
-                { "name": "constant.numeric.php", "match": "\\b([1-9][0-9_]*|0[0-7_]*|0[xX][0-9a-fA-F_]+|0[bB][01_]+|0)\\b" }
+                { "comment": "Float with optional underscores: 3_14.15_92, 1e10, 1.5E-3",
+                  "name": "constant.numeric.float.php",
+                  "match": "\\b([0-9][0-9_]*\\.[0-9][0-9_]*([eE][+-]?[0-9]+)?|[0-9][0-9_]*[eE][+-]?[0-9]+)\\b" },
+                { "comment": "Hex: 0x1F, 0xFF_FF (underscores allowed)",
+                  "name": "constant.numeric.hex.php",
+                  "match": "\\b0[xX][0-9a-fA-F_]+\\b" },
+                { "comment": "Binary: 0b1010, 0b1010_1010",
+                  "name": "constant.numeric.binary.php",
+                  "match": "\\b0[bB][01_]+\\b" },
+                { "comment": "Octal: 0o777 (TinyPHP extension, PHP 8.1+)",
+                  "name": "constant.numeric.octal.php",
+                  "match": "\\b0[oO][0-7_]+\\b" },
+                { "comment": "Decimal with underscores: 1_000_000",
+                  "name": "constant.numeric.decimal.php",
+                  "match": "\\b([1-9][0-9_]*)\\b" },
+                { "name": "constant.numeric.php", "match": "\\b0\\b" }
             ]
         }
     }

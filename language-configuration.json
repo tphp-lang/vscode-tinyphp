@@ -33,5 +33,33 @@
             "end": "^\\s*(//|#)\\s*endregion\\b"
         }
     },
+    "onEnterRules": [
+        {
+            "beforeText": "^\\s*\\/\\*\\*(?!\\/)([^\\*]|\\*(?!\\/))*$",
+            "afterText": "^\\s*\\*\\/$",
+            "action": { "indentAction": "indentOutdent", "appendText": " * " }
+        },
+        {
+            "beforeText": "^\\s*\\/\\*\\*(?!\\/)([^\\*]|\\*(?!\\/))*$",
+            "action": { "indentAction": "none", "appendText": " * " }
+        },
+        {
+            "beforeText": "^(\\t|(\\ \\ ))*\\ \\*(\\ ([^\\*]|\\*(?!\\/))*)?$",
+            "action": { "indentAction": "none", "appendText": "* " }
+        },
+        {
+            "beforeText": "^(\\t|(\\ \\ ))*\\ \\*\\/\\s*$",
+            "action": { "indentAction": "none", "removeText": 1 }
+        },
+        {
+            "beforeText": "^(\\t|(\\ \\ ))*\\ \\*[^/]*\\*\\/\\s*$",
+            "action": { "indentAction": "none", "removeText": 1 }
+        },
+        {
+            "beforeText": "^\\s+([^{i\\s]|i(?!f\\b))",
+            "previousLineText": "^\\s*(((else ?)?if|for(each)?|while)\\s*\\(.*\\)\\s*|else\\s*)$",
+            "action": { "indentAction": "outdent" }
+        }
+    ],
     "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)"
 }

@@ -138,6 +138,21 @@
                     "default": true,
                     "description": "Enable signature help."
                 },
+                "tinyphp.inlayHints.enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable inlay hints (grey type annotations for untyped parameters/constants)."
+                },
+                "tinyphp.inlayHints.showParameterTypes": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show grey type hints for untyped function/method parameters (type is optional in TinyPHP)."
+                },
+                "tinyphp.inlayHints.showConstantTypes": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show grey deduced type hints for untyped global/namespace constants."
+                },
                 "tinyphp.files.exclude": {
                     "type": "array",
                     "items": {
