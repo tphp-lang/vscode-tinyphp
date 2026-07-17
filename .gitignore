@@ -5,3 +5,12 @@ lib/
 dist/
 .DS_Store
 Thumbs.db
+
+# TypeScript 增量构建缓存
+*.tsbuildinfo
+
+# TRAE IDE 工作目录（会话记录、规格文档）
+.trae/
+
+# 临时测试脚本（仅根目录，不影响 test/ 子目录下的正式测试）
+/test-*.js

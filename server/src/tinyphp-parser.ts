@@ -95,6 +95,8 @@ const keywordDocs: Record<string, KeywordDoc> = {
     'Exception': { description: '✅ 异常基类。子类沿父链匹配,catch(Exception $e) 捕获所有', category: 'Exception' },
     'DIRECTORY_SEPARATOR': { description: '编译期替换为平台路径分隔符 (/ 或 \\)', category: 'Constant' },
     'C': { description: '🔧 C 互操作命名空间: C->func() 调用 / C.Type 类型注解 / (C.Type) 强制转换', category: 'C Interop' },
+    'AnnotationEntry': { description: '✅ 注解 entry 内置类（C 结构体，非用户类）。每个注解使用编译期收集为一个 `AnnotationEntry` 实例。\n\n**属性**: `$data: array`（位置参数数组）、`$type: string`（`method`/`static_method`/`class`/`function`）、`$name: string`（限定名如 `Ns\\Class->method`）\n\n**方法**: `call(...$args): mixed`（调用目标方法/静态方法/函数，class 目标报错）、`newInstance(...$args): object`（实例化目标类，非 class 目标报错）\n\n**访问**: 通过注解常量静态索引，如 `ROUTE[0]->call(...)`、`ROUTE[0]->name`。编译期零开销直接展开为静态指针或直接调用。**不支持动态索引** `ROUTE[$i]`（编译期无法确定目标）。', category: 'OOP' },
+    'Export': { description: '🔧 动态库导出注解 `#[Export("c_function_name")]`。标记独立函数导出为 C 函数，配合 `-shared` 编译选项生成可被外部 C 代码调用的动态库（`.dll`/`.so`/`.dylib`）。\n\n**规则**: 仅可用于独立函数（`function`），用于方法报语法错误；参数为字符串字面量（合法 C 标识符，全局唯一）；非 `-shared` 模式下静默忽略。\n\n**类型约束**: 参数/返回值允许 `int`/`float`/`bool`/`string`/`void`/`C.Type`，**禁止 `array`**。`string` 直接暴露 `t_string*`。\n\n与 `#[Attribute]` 注解系统**独立**：不经过声明，不收集到注解常量数组，仅控制 C 符号导出。可与用户注解共存于同一函数。', category: 'C Interop' },
 };
 
 // ============================================================================
@@ -1022,6 +1024,470 @@ const functionDocs: Record<string, FuncDoc> = {
         params: [{ name: '$var', description: '要销毁的变量' }],
         returnType: 'void'
     },
+
+    // ---- pcre 正则表达式 (ext/pcre, NFA VM 引擎) ----
+    'preg_match': {
+        description: '执行正则表达式匹配（NFA VM 引擎）。返回匹配结果数组，未匹配返回空数组',
+        signature: 'preg_match(string $pattern, string $subject): array',
+        params: [
+            { name: '$pattern', description: '正则表达式（含分隔符 /.../）' },
+            { name: '$subject', description: '目标字符串' }
+        ],
+        returnType: 'array'
+    },
+    'preg_match_all': {
+        description: '全局正则匹配，返回所有匹配结果',
+        signature: 'preg_match_all(string $pattern, string $subject): array',
+        params: [
+            { name: '$pattern', description: '正则表达式' },
+            { name: '$subject', description: '目标字符串' }
+        ],
+        returnType: 'array'
+    },
+    'preg_replace': {
+        description: '正则替换。返回替换后的字符串',
+        signature: 'preg_replace(string $pattern, string $replacement, string $subject, int $limit): string',
+        params: [
+            { name: '$pattern', description: '正则表达式' },
+            { name: '$replacement', description: '替换字符串' },
+            { name: '$subject', description: '目标字符串' },
+            { name: '$limit', description: '最大替换次数（-1=无限）' }
+        ],
+        returnType: 'string'
+    },
+    'preg_split': {
+        description: '用正则分割字符串，返回数组',
+        signature: 'preg_split(string $pattern, string $subject, int $limit, int $flags): array',
+        params: [
+            { name: '$pattern', description: '正则表达式' },
+            { name: '$subject', description: '目标字符串' },
+            { name: '$limit', description: '最大分割数（-1=无限）' },
+            { name: '$flags', description: '标志位（PREG_SPLIT_NO_EMPTY/PREG_SPLIT_DELIM_CAPTURE）' }
+        ],
+        returnType: 'array'
+    },
+    'preg_grep': {
+        description: '返回数组中匹配模式的元素',
+        signature: 'preg_grep(string $pattern, array $array, int $flags): array',
+        params: [
+            { name: '$pattern', description: '正则表达式' },
+            { name: '$array', description: '输入数组' },
+            { name: '$flags', description: '标志位（PREG_GREP_INVERT 返回不匹配项）' }
+        ],
+        returnType: 'array'
+    },
+    'preg_quote': {
+        description: '转义正则特殊字符',
+        signature: 'preg_quote(string $str, string $delimiter): string',
+        params: [
+            { name: '$str', description: '要转义的字符串' },
+            { name: '$delimiter', description: '分隔符（也会被转义）' }
+        ],
+        returnType: 'string'
+    },
+    'preg_last_error': {
+        description: '返回最后一次正则操作的错误码',
+        signature: 'preg_last_error(): int',
+        params: [],
+        returnType: 'int'
+    },
+    'preg_last_error_msg': {
+        description: '返回最后一次正则操作的错误描述',
+        signature: 'preg_last_error_msg(): string',
+        params: [],
+        returnType: 'string'
+    },
+
+    // ---- iconv 字符集转换 ----
+    'iconv': {
+        description: '将字符串从源编码转换为目标编码',
+        signature: 'iconv(string $from_encoding, string $to_encoding, string $string): string',
+        params: [
+            { name: '$from_encoding', description: '源编码' },
+            { name: '$to_encoding', description: '目标编码' },
+            { name: '$string', description: '要转换的字符串' }
+        ],
+        returnType: 'string'
+    },
+    'iconv_strlen': {
+        description: '返回指定编码下字符串的字符数',
+        signature: 'iconv_strlen(string $string): int',
+        params: [{ name: '$string', description: '目标字符串' }],
+        returnType: 'int'
+    },
+    'iconv_strpos': {
+        description: '查找子串首次出现位置（字符计数）',
+        signature: 'iconv_strpos(string $haystack, string $needle): int',
+        params: [
+            { name: '$haystack', description: '目标字符串' },
+            { name: '$needle', description: '查找子串' }
+        ],
+        returnType: 'int'
+    },
+    'iconv_substr': {
+        description: '截取子串（按字符计数）',
+        signature: 'iconv_substr(string $string, int $offset, int $length): string',
+        params: [
+            { name: '$string', description: '目标字符串' },
+            { name: '$offset', description: '起始位置' },
+            { name: '$length', description: '截取长度' }
+        ],
+        returnType: 'string'
+    },
+    'iconv_get_encoding': {
+        description: '获取当前 iconv 内部编码',
+        signature: 'iconv_get_encoding(): string',
+        params: [],
+        returnType: 'string'
+    },
+    'iconv_set_encoding': {
+        description: '设置 iconv 内部编码',
+        signature: 'iconv_set_encoding(string $type, string $encoding): bool',
+        params: [
+            { name: '$type', description: '编码类型' },
+            { name: '$encoding', description: '编码名称' }
+        ],
+        returnType: 'bool'
+    },
+    'iconv_mime_encode': {
+        description: '编码 MIME 头字段',
+        signature: 'iconv_mime_encode(string $field_name, string $field_value): string',
+        params: [
+            { name: '$field_name', description: '字段名' },
+            { name: '$field_value', description: '字段值' }
+        ],
+        returnType: 'string'
+    },
+    'iconv_mime_decode': {
+        description: '解码 MIME 头字段',
+        signature: 'iconv_mime_decode(string $encoded_string): string',
+        params: [{ name: '$encoded_string', description: '编码的字符串' }],
+        returnType: 'string'
+    },
+
+    // ---- filter 过滤器 ----
+    'filter_var': {
+        description: '用指定过滤器过滤变量。验证过滤器返回过滤后的值或 false，净化过滤器返回净化后的值',
+        signature: 'filter_var(mixed $value, int $filter, int $flags): mixed',
+        params: [
+            { name: '$value', description: '要过滤的值' },
+            { name: '$filter', description: '过滤器 ID（FILTER_VALIDATE_*/FILTER_SANITIZE_*）' },
+            { name: '$flags', description: '标志位（FILTER_FLAG_*）' }
+        ],
+        returnType: 'mixed'
+    },
+    'filter_list': {
+        description: '返回所有可用过滤器名称数组',
+        signature: 'filter_list(): array',
+        params: [],
+        returnType: 'array'
+    },
+    'filter_id': {
+        description: '根据过滤器名称获取过滤器 ID',
+        signature: 'filter_id(string $name): int',
+        params: [{ name: '$name', description: '过滤器名称' }],
+        returnType: 'int'
+    },
+
+    // ---- password 密码哈希 ----
+    'password_hash': {
+        description: '创建密码哈希（仅支持 bcrypt，cost 硬编码 10）',
+        signature: 'password_hash(string $password, int $algo, array $options): string',
+        params: [
+            { name: '$password', description: '原始密码' },
+            { name: '$algo', description: '算法（目前仅支持 PASSWORD_BCRYPT）' },
+            { name: '$options', description: '选项（cost 等）' }
+        ],
+        returnType: 'string'
+    },
+    'password_verify': {
+        description: '验证密码与哈希是否匹配',
+        signature: 'password_verify(string $password, string $hash): bool',
+        params: [
+            { name: '$password', description: '原始密码' },
+            { name: '$hash', description: '密码哈希' }
+        ],
+        returnType: 'bool'
+    },
+
+    // ---- pcntl 进程控制 (POSIX 专属, 需 #import pcntl) ----
+    'pcntl_fork': {
+        description: '创建子进程。父进程返回子进程 PID，子进程返回 0',
+        signature: 'pcntl_fork(): int',
+        params: [],
+        returnType: 'int'
+    },
+    'pcntl_waitpid': {
+        description: '等待指定子进程状态变化',
+        signature: 'pcntl_waitpid(int $pid, int &$status, int $flags): int',
+        params: [
+            { name: '$pid', description: '子进程 PID' },
+            { name: '$status', description: '状态（引用传递）' },
+            { name: '$flags', description: '等待标志' }
+        ],
+        returnType: 'int'
+    },
+    'pcntl_wait': {
+        description: '等待任意子进程状态变化',
+        signature: 'pcntl_wait(int &$status): int',
+        params: [{ name: '$status', description: '状态（引用传递）' }],
+        returnType: 'int'
+    },
+    'pcntl_exec': {
+        description: '在当前进程空间执行程序（替换当前进程）',
+        signature: 'pcntl_exec(string $path): void',
+        params: [{ name: '$path', description: '可执行文件路径' }],
+        returnType: 'void'
+    },
+    'pcntl_alarm': {
+        description: '设置 SIGALRM 定时器',
+        signature: 'pcntl_alarm(int $seconds): int',
+        params: [{ name: '$seconds', description: '秒数（0=取消）' }],
+        returnType: 'int'
+    },
+    'pcntl_get_last_error': {
+        description: '返回最后一次 pcntl 操作的错误码',
+        signature: 'pcntl_get_last_error(): int',
+        params: [],
+        returnType: 'int'
+    },
+    'pcntl_strerror': {
+        description: '根据错误码返回错误描述',
+        signature: 'pcntl_strerror(int $error_code): string',
+        params: [{ name: '$error_code', description: '错误码' }],
+        returnType: 'string'
+    },
+
+    // ---- posix 系统 (POSIX 专属, 需 #import posix) ----
+    'posix_getpid': { description: '返回当前进程 PID', signature: 'posix_getpid(): int', params: [], returnType: 'int' },
+    'posix_getppid': { description: '返回父进程 PID', signature: 'posix_getppid(): int', params: [], returnType: 'int' },
+    'posix_getuid': { description: '返回当前进程实际用户 ID', signature: 'posix_getuid(): int', params: [], returnType: 'int' },
+    'posix_geteuid': { description: '返回当前进程有效用户 ID', signature: 'posix_geteuid(): int', params: [], returnType: 'int' },
+    'posix_getgid': { description: '返回当前进程实际组 ID', signature: 'posix_getgid(): int', params: [], returnType: 'int' },
+    'posix_getegid': { description: '返回当前进程有效组 ID', signature: 'posix_getegid(): int', params: [], returnType: 'int' },
+    'posix_getcwd': { description: '返回当前工作目录路径', signature: 'posix_getcwd(): string', params: [], returnType: 'string' },
+    'posix_isatty': { description: '检查文件描述符是否为终端', signature: 'posix_isatty(int $fd): int', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'int' },
+    'posix_kill': { description: '向进程发送信号', signature: 'posix_kill(int $pid, int $sig): int', params: [{ name: '$pid', description: '目标 PID' }, { name: '$sig', description: '信号编号' }], returnType: 'int' },
+    'posix_strerror': { description: '根据错误码返回错误描述', signature: 'posix_strerror(int $errno): string', params: [{ name: '$errno', description: '错误码' }], returnType: 'string' },
+    'posix_get_last_error': { description: '返回最后一次 posix 操作的错误码', signature: 'posix_get_last_error(): int', params: [], returnType: 'int' },
+    'posix_ttyname': { description: '返回终端设备名', signature: 'posix_ttyname(int $fd): string', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'string' },
+    'posix_uname': { description: '返回系统信息数组（sysname/nodename/release/version/machine）', signature: 'posix_uname(): array', params: [], returnType: 'array' },
+    'posix_times': { description: '返回进程时间使用情况数组', signature: 'posix_times(): array', params: [], returnType: 'array' },
+
+    // ---- exif EXIF 元数据 (需 #import exif, 纯 phpc 实现) ----
+    'exif_imagetype': {
+        description: '检测图像类型，返回 IMAGETYPE_* 常量',
+        signature: 'exif_imagetype(string $filename): int',
+        params: [{ name: '$filename', description: '图像文件路径' }],
+        returnType: 'int'
+    },
+    'exif_read_data': {
+        description: '从图像文件读取 EXIF 头信息，返回关联数组',
+        signature: 'exif_read_data(string $filename): array',
+        params: [{ name: '$filename', description: '图像文件路径' }],
+        returnType: 'array'
+    },
+    'exif_thumbnail': {
+        description: '读取嵌入的缩略图数据',
+        signature: 'exif_thumbnail(string $filename): array',
+        params: [{ name: '$filename', description: '图像文件路径' }],
+        returnType: 'array'
+    },
+    'exif_tagname': {
+        description: '根据索引返回 EXIF 标签名',
+        signature: 'exif_tagname(int $index): string',
+        params: [{ name: '$index', description: 'EXIF 标签索引' }],
+        returnType: 'string'
+    },
+    'exif_make_test_jpeg': { description: '生成测试用 JPEG 数据（测试辅助）', signature: 'exif_make_test_jpeg(): string', params: [], returnType: 'string' },
+    'exif_make_test_jpeg_ex': { description: '生成扩展测试用 JPEG 数据（含 EXIF，测试辅助）', signature: 'exif_make_test_jpeg_ex(): string', params: [], returnType: 'string' },
+    'exif_make_test_tiff': { description: '生成测试用 TIFF 数据（测试辅助）', signature: 'exif_make_test_tiff(): string', params: [], returnType: 'string' },
+    'exif_make_test_header': { description: '生成测试用图像头（测试辅助）', signature: 'exif_make_test_header(): string', params: [], returnType: 'string' },
+
+    // ---- calendar 日历转换 (纯 tphp 实现, 基于 JD) ----
+    'gregoriantojd': { description: '公历转儒略日', signature: 'gregoriantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'jdtogregorian': { description: '儒略日转公历，返回 ["month","day","year"]', signature: 'jdtogregorian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
+    'juliantojd': { description: '儒略历转儒略日', signature: 'juliantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'jdtojulian': { description: '儒略日转儒略历，返回 ["month","day","year"]', signature: 'jdtojulian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
+    'jewishtojd': { description: '犹太历转儒略日', signature: 'jewishtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'jdtojewish': { description: '儒略日转犹太历，返回 ["month","day","year"]', signature: 'jdtojewish(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
+    'jdtojewish_str': { description: '儒略日转犹太历字符串（含希伯来月份名）', signature: 'jdtojewish_str(int $jd): string', params: [{ name: '$jd', description: '儒略日' }], returnType: 'string' },
+    'jewish_month_name': { description: '返回犹太历月份名', signature: 'jewish_month_name(int $month): string', params: [{ name: '$month', description: '月份编号' }], returnType: 'string' },
+    'frenchtojd': { description: '法国共和历转儒略日', signature: 'frenchtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'jdtofrench': { description: '儒略日转法国共和历', signature: 'jdtofrench(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
+    'cal_days_in_month': { description: '返回指定日历某月天数', signature: 'cal_days_in_month(int $calendar, int $month, int $year): int', params: [{ name: '$calendar', description: '日历类型（CAL_*）' }, { name: '$month', description: '月' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'cal_from_jd': { description: '儒略日转指定日历的日期信息数组', signature: 'cal_from_jd(int $jd, int $calendar): array', params: [{ name: '$jd', description: '儒略日' }, { name: '$calendar', description: '日历类型' }], returnType: 'array' },
+    'cal_to_jd': { description: '指定日历日期转儒略日', signature: 'cal_to_jd(int $calendar, int $month, int $day, int $year): int', params: [{ name: '$calendar', description: '日历类型' }, { name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
+    'cal_info': { description: '返回指定日历的信息数组', signature: 'cal_info(int $calendar): array', params: [{ name: '$calendar', description: '日历类型' }], returnType: 'array' },
+    'easter_date': { description: '返回指定年份复活节的 Unix 时间戳', signature: 'easter_date(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int' },
+    'easter_days': { description: '返回当年春分后到复活节的天数', signature: 'easter_days(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int' },
+
+    // ---- fileinfo MIME 检测 ----
+    'finfo_open': {
+        description: '创建 fileinfo 资源（魔数检测）',
+        signature: 'finfo_open(int $flags, string $magic_file): Resource',
+        params: [
+            { name: '$flags', description: '标志位（FILEINFO_*）' },
+            { name: '$magic_file', description: '魔数文件路径（可空）' }
+        ],
+        returnType: 'Resource'
+    },
+    'finfo_file': {
+        description: '返回文件 MIME 信息',
+        signature: 'finfo_file(Resource $finfo, string $filename, int $flags): string',
+        params: [
+            { name: '$finfo', description: 'finfo 资源' },
+            { name: '$filename', description: '文件路径' },
+            { name: '$flags', description: '标志位' }
+        ],
+        returnType: 'string'
+    },
+    'finfo_buffer': {
+        description: '返回字符串内容的 MIME 信息',
+        signature: 'finfo_buffer(Resource $finfo, string $data, int $flags): string',
+        params: [
+            { name: '$finfo', description: 'finfo 资源' },
+            { name: '$data', description: '要检测的内容' },
+            { name: '$flags', description: '标志位' }
+        ],
+        returnType: 'string'
+    },
+    'finfo_close': {
+        description: '关闭 fileinfo 资源',
+        signature: 'finfo_close(Resource $finfo): void',
+        params: [{ name: '$finfo', description: 'finfo 资源' }],
+        returnType: 'void'
+    },
+    'finfo_set_flags': {
+        description: '设置 fileinfo 选项',
+        signature: 'finfo_set_flags(Resource $finfo, int $flags): bool',
+        params: [
+            { name: '$finfo', description: 'finfo 资源' },
+            { name: '$flags', description: '标志位' }
+        ],
+        returnType: 'bool'
+    },
+    'mime_content_type': {
+        description: '检测文件 MIME 类型',
+        signature: 'mime_content_type(string $filename): string',
+        params: [{ name: '$filename', description: '文件路径' }],
+        returnType: 'string'
+    },
+
+    // ---- zlib 压缩/解压 (内置 zlib 1.3.2) ----
+    'gzcompress': { description: '压缩字符串（zlib 格式）', signature: 'gzcompress(string $data, int $level, int $encoding): string', params: [{ name: '$data', description: '数据' }, { name: '$level', description: '压缩级别（-1~9）' }, { name: '$encoding', description: '编码格式（ZLIB_ENCODING_*）' }], returnType: 'string' },
+    'gzuncompress': { description: '解压 gzcompress 压缩的数据', signature: 'gzuncompress(string $data, int $max_length, int $encoding): string', params: [{ name: '$data', description: '压缩数据' }, { name: '$max_length', description: '最大长度（0=无限）' }, { name: '$encoding', description: '编码格式' }], returnType: 'string' },
+    'gzencode': { description: '创建 gzip 压缩数据', signature: 'gzencode(string $data, int $level, int $encoding): string', params: [{ name: '$data', description: '数据' }, { name: '$level', description: '压缩级别' }, { name: '$encoding', description: '编码格式' }], returnType: 'string' },
+    'gzdecode': { description: '解码 gzip 数据（自动检测格式）', signature: 'gzdecode(string $data, int $max_length): string', params: [{ name: '$data', description: 'gzip 数据' }, { name: '$max_length', description: '最大长度' }], returnType: 'string' },
+    'gzdeflate': { description: '原始 DEFLATE 压缩', signature: 'gzdeflate(string $data, int $level, int $encoding): string', params: [{ name: '$data', description: '数据' }, { name: '$level', description: '压缩级别' }, { name: '$encoding', description: '编码格式' }], returnType: 'string' },
+    'gzinflate': { description: '解压原始 DEFLATE 数据', signature: 'gzinflate(string $data, int $max_length): string', params: [{ name: '$data', description: 'DEFLATE 数据' }, { name: '$max_length', description: '最大长度' }], returnType: 'string' },
+    'zlib_encode': { description: '通用编码接口（由 encoding 指定格式）', signature: 'zlib_encode(string $data, int $encoding, int $level): string', params: [{ name: '$data', description: '数据' }, { name: '$encoding', description: '编码格式' }, { name: '$level', description: '压缩级别' }], returnType: 'string' },
+    'zlib_decode': { description: '通用解码接口（自动检测格式）', signature: 'zlib_decode(string $data, int $max_length): string', params: [{ name: '$data', description: '压缩数据' }, { name: '$max_length', description: '最大长度' }], returnType: 'string' },
+    'gzopen': { description: '打开 gz 文件', signature: 'gzopen(string $filename, string $mode): Resource', params: [{ name: '$filename', description: '文件名' }, { name: '$mode', description: '打开模式（同 fopen，可附加压缩级别如 wb9）' }], returnType: 'Resource' },
+    'gzclose': { description: '关闭 gz 文件', signature: 'gzclose(Resource $stream): bool', params: [{ name: '$stream', description: 'gz 文件资源' }], returnType: 'bool' },
+    'gzread': { description: '读取 gz 文件数据', signature: 'gzread(Resource $stream, int $length): string', params: [{ name: '$stream', description: '资源' }, { name: '$length', description: '读取长度' }], returnType: 'string' },
+    'gzwrite': { description: '写入 gz 文件数据', signature: 'gzwrite(Resource $stream, string $data, int $length): int', params: [{ name: '$stream', description: '资源' }, { name: '$data', description: '数据' }, { name: '$length', description: '写入长度（0=全部）' }], returnType: 'int' },
+    'gzputs': { description: 'gzwrite 别名', signature: 'gzputs(Resource $stream, string $data, int $length): int', params: [{ name: '$stream', description: '资源' }, { name: '$data', description: '数据' }, { name: '$length', description: '写入长度' }], returnType: 'int' },
+    'gzeof': { description: '检查是否到达 gz 文件尾', signature: 'gzeof(Resource $stream): bool', params: [{ name: '$stream', description: '资源' }], returnType: 'bool' },
+    'gzgets': { description: '从 gz 文件读取一行', signature: 'gzgets(Resource $stream, int $length): string', params: [{ name: '$stream', description: '资源' }, { name: '$length', description: '最大长度（0=缓冲区大小）' }], returnType: 'string' },
+    'gzgetc': { description: '从 gz 文件读取单个字符', signature: 'gzgetc(Resource $stream): string', params: [{ name: '$stream', description: '资源' }], returnType: 'string' },
+    'gzrewind': { description: '重置 gz 文件到开头', signature: 'gzrewind(Resource $stream): bool', params: [{ name: '$stream', description: '资源' }], returnType: 'bool' },
+    'gzseek': { description: '定位 gz 文件位置', signature: 'gzseek(Resource $stream, int $offset, int $whence): int', params: [{ name: '$stream', description: '资源' }, { name: '$offset', description: '偏移' }, { name: '$whence', description: '定位方式（SEEK_SET/SEEK_CUR）' }], returnType: 'int' },
+    'gztell': { description: '返回 gz 文件当前位置', signature: 'gztell(Resource $stream): int', params: [{ name: '$stream', description: '资源' }], returnType: 'int' },
+    'gzpassthru': { description: '读取 gz 文件剩余数据并输出到 stdout', signature: 'gzpassthru(Resource $stream): int', params: [{ name: '$stream', description: '资源' }], returnType: 'int' },
+    'gzflush': { description: '刷新 gz 文件输出缓冲区', signature: 'gzflush(Resource $stream, int $flush): bool', params: [{ name: '$stream', description: '资源' }, { name: '$flush', description: 'flush 模式（ZLIB_*）' }], returnType: 'bool' },
+    'gzfile': { description: '读取整个 gz 文件到数组（每行一个元素）', signature: 'gzfile(string $filename): array', params: [{ name: '$filename', description: '文件名' }], returnType: 'array' },
+    'readgzfile': { description: '读取整个 gz 文件并输出到 stdout', signature: 'readgzfile(string $filename): int', params: [{ name: '$filename', description: '文件名' }], returnType: 'int' },
+    'deflate_init': { description: '创建压缩上下文（流式压缩）', signature: 'deflate_init(int $encoding, int $level): Resource', params: [{ name: '$encoding', description: '编码格式' }, { name: '$level', description: '压缩级别' }], returnType: 'Resource' },
+    'deflate_add': { description: '增量压缩数据块', signature: 'deflate_add(Resource $context, string $data, int $flush_mode): string', params: [{ name: '$context', description: '压缩上下文' }, { name: '$data', description: '数据块' }, { name: '$flush_mode', description: 'flush 模式' }], returnType: 'string' },
+    'inflate_init': { description: '创建解压上下文（流式解压）', signature: 'inflate_init(int $encoding): Resource', params: [{ name: '$encoding', description: '编码格式（0=自动检测）' }], returnType: 'Resource' },
+    'inflate_add': { description: '增量解压数据块', signature: 'inflate_add(Resource $context, string $data, int $flush_mode): string', params: [{ name: '$context', description: '解压上下文' }, { name: '$data', description: '数据块' }, { name: '$flush_mode', description: 'flush 模式' }], returnType: 'string' },
+    'inflate_get_status': { description: '返回 zlib 状态码', signature: 'inflate_get_status(Resource $context): int', params: [{ name: '$context', description: '解压上下文' }], returnType: 'int' },
+    'inflate_get_read_len': { description: '返回已解压的总字节数', signature: 'inflate_get_read_len(Resource $context): int', params: [{ name: '$context', description: '解压上下文' }], returnType: 'int' },
+
+    // ---- zip 归档读写 (内置 zlib, 手写 ZIP 容器) ----
+    'zip_open': { description: '打开/创建 ZIP 归档', signature: 'zip_open(string $filename, int $flags): Resource', params: [{ name: '$filename', description: '文件名' }, { name: '$flags', description: '标志位（ZIP_*）' }], returnType: 'Resource' },
+    'zip_close': { description: '关闭 ZIP 归档（写入模式刷盘）', signature: 'zip_close(Resource $zip): bool', params: [{ name: '$zip', description: 'ZIP 资源' }], returnType: 'bool' },
+    'zip_num_files': { description: '返回 ZIP 中文件总数', signature: 'zip_num_files(Resource $zip): int', params: [{ name: '$zip', description: 'ZIP 资源' }], returnType: 'int' },
+    'zip_get_error_string': { description: '返回最后错误描述', signature: 'zip_get_error_string(Resource $zip): string', params: [{ name: '$zip', description: 'ZIP 资源' }], returnType: 'string' },
+    'zip_locate': { description: '按名查找条目索引（未找到返回 -1）', signature: 'zip_locate(Resource $zip, string $name): int', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$name', description: '条目名' }], returnType: 'int' },
+    'zip_read': { description: '返回所有条目列表', signature: 'zip_read(Resource $zip): array', params: [{ name: '$zip', description: 'ZIP 资源' }], returnType: 'array' },
+    'zip_stat': { description: '获取单个条目信息', signature: 'zip_stat(Resource $zip, int $index): array', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'array' },
+    'zip_entry_name': { description: '返回条目名', signature: 'zip_entry_name(Resource $zip, int $index): string', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'string' },
+    'zip_entry_filesize': { description: '返回条目原始大小', signature: 'zip_entry_filesize(Resource $zip, int $index): int', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'int' },
+    'zip_entry_compressedsize': { description: '返回条目压缩后大小', signature: 'zip_entry_compressedsize(Resource $zip, int $index): int', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'int' },
+    'zip_entry_compressionmethod': { description: '返回压缩方法名（"Stored"/"Deflated"）', signature: 'zip_entry_compressionmethod(Resource $zip, int $index): string', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'string' },
+    'zip_entry_open': { description: '打开条目准备读取', signature: 'zip_entry_open(Resource $zip, int $index): bool', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'bool' },
+    'zip_entry_read': { description: '读取条目内容', signature: 'zip_entry_read(Resource $zip, int $index, int $length): string', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }, { name: '$length', description: '读取长度（0=全部）' }], returnType: 'string' },
+    'zip_entry_close': { description: '关闭当前条目', signature: 'zip_entry_close(Resource $zip): bool', params: [{ name: '$zip', description: 'ZIP 资源' }], returnType: 'bool' },
+    'zip_add_file': { description: '添加文件到 ZIP', signature: 'zip_add_file(Resource $zip, string $name, string $data, int $flags, int $comp_method): bool', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$name', description: '条目名' }, { name: '$data', description: '文件内容' }, { name: '$flags', description: '标志位' }, { name: '$comp_method', description: '压缩方法（ZIP_CM_*）' }], returnType: 'bool' },
+    'zip_add_dir': { description: '添加目录（以 / 结尾）', signature: 'zip_add_dir(Resource $zip, string $dirname, int $flags): bool', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$dirname', description: '目录名' }, { name: '$flags', description: '标志位' }], returnType: 'bool' },
+    'zip_delete': { description: '删除条目（不支持修改已有归档，抛异常）', signature: 'zip_delete(Resource $zip, int $index): bool', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }], returnType: 'bool' },
+    'zip_rename': { description: '重命名条目（不支持修改已有归档，抛异常）', signature: 'zip_rename(Resource $zip, int $index, string $new_name): bool', params: [{ name: '$zip', description: 'ZIP 资源' }, { name: '$index', description: '条目索引' }, { name: '$new_name', description: '新名称' }], returnType: 'bool' },
+
+    // ---- stream Socket Stream (跨平台, 需 #import stream) ----
+    'stream_close': { description: '关闭 socket fd', signature: 'stream_close(int $fd): void', params: [{ name: '$fd', description: 'socket 文件描述符' }], returnType: 'void' },
+    'stream_last_error': { description: '返回最后一次 socket 操作的错误码', signature: 'stream_last_error(): int', params: [], returnType: 'int' },
+    'stream_strerror': { description: '根据错误码返回错误描述', signature: 'stream_strerror(int $err): string', params: [{ name: '$err', description: '错误码' }], returnType: 'string' },
+    'stream_set_blocking': { description: '设置阻塞/非阻塞模式', signature: 'stream_set_blocking(int $fd, bool $enable): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$enable', description: 'true=阻塞, false=非阻塞' }], returnType: 'bool' },
+    'stream_set_read_buffer': { description: '设置读缓冲区大小', signature: 'stream_set_read_buffer(int $fd, int $buffer): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$buffer', description: '缓冲区大小' }], returnType: 'int' },
+    'stream_set_write_buffer': { description: '设置写缓冲区大小', signature: 'stream_set_write_buffer(int $fd, int $buffer): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$buffer', description: '缓冲区大小' }], returnType: 'int' },
+    'stream_set_timeout': { description: '设置读写超时', signature: 'stream_set_timeout(int $fd, int $seconds, int $microseconds): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$seconds', description: '秒' }, { name: '$microseconds', description: '微秒' }], returnType: 'bool' },
+    'stream_isatty': { description: '检查是否为终端', signature: 'stream_isatty(int $fd): bool', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'bool' },
+    'stream_select': { description: '多路复用等待（poll 风格）', signature: 'stream_select(array $read, array $write, array $except, int $tv_sec, int $tv_usec): int', params: [{ name: '$read', description: '可读 fd 数组' }, { name: '$write', description: '可写 fd 数组' }, { name: '$except', description: '异常 fd 数组' }, { name: '$tv_sec', description: '秒' }, { name: '$tv_usec', description: '微秒' }], returnType: 'int' },
+    'stream_get_contents': { description: '读取全部内容', signature: 'stream_get_contents(int $fd, int $length, int $offset): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$length', description: '长度（-1=全部）' }, { name: '$offset', description: '偏移（-1=当前位置）' }], returnType: 'string' },
+    'stream_get_line': { description: '读取一行（到指定结束符）', signature: 'stream_get_line(int $fd, int $length, string $ending): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$length', description: '最大长度' }, { name: '$ending', description: '结束符' }], returnType: 'string' },
+    'stream_get_meta_data': { description: '返回流元数据数组', signature: 'stream_get_meta_data(int $fd): array', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'array' },
+    'stream_socket_server': { description: '创建服务端 socket', signature: 'stream_socket_server(int $domain, int $type, int $protocol): int', params: [{ name: '$domain', description: '协议族（STREAM_PF_*）' }, { name: '$type', description: 'socket 类型（STREAM_SOCK_*）' }, { name: '$protocol', description: '协议（STREAM_IPPROTO_*）' }], returnType: 'int' },
+    'stream_socket_accept': { description: '接受客户端连接', signature: 'stream_socket_accept(int $server_fd): int', params: [{ name: '$server_fd', description: '服务端 fd' }], returnType: 'int' },
+    'stream_socket_client': { description: '创建客户端 socket 并连接', signature: 'stream_socket_client(int $domain, int $type, int $protocol, string $addr, int $port): int', params: [{ name: '$domain', description: '协议族' }, { name: '$type', description: 'socket 类型' }, { name: '$protocol', description: '协议' }, { name: '$addr', description: '地址' }, { name: '$port', description: '端口' }], returnType: 'int' },
+    'stream_socket_recvfrom': { description: '接收数据（UDP 或对端地址）', signature: 'stream_socket_recvfrom(int $fd, int $len, int $flags, string &$addr): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$len', description: '最大长度' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '对端地址（引用）' }], returnType: 'string' },
+    'stream_socket_sendto': { description: '发送数据到指定地址', signature: 'stream_socket_sendto(int $fd, string $data, int $flags, string $addr, int $port): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$data', description: '数据' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '目标地址' }, { name: '$port', description: '目标端口' }], returnType: 'int' },
+    'stream_socket_get_name': { description: '返回 socket 的本地或对端地址', signature: 'stream_socket_get_name(int $fd, bool $want_peer): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$want_peer', description: 'true=对端, false=本地' }], returnType: 'string' },
+    'stream_socket_shutdown': { description: '关闭 socket 的读/写方向', signature: 'stream_socket_shutdown(int $fd, int $how): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$how', description: '方向（STREAM_SHUT_*）' }], returnType: 'bool' },
+    'stream_socket_enable_crypto': { description: '启用/禁用 TLS（需 openssl 扩展）', signature: 'stream_socket_enable_crypto(int $fd, int $enable, int $method): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$enable', description: 'STREAM_CRYPTO_ENABLE/DISABLE' }, { name: '$method', description: 'TLS 方法（STREAM_CRYPTO_METHOD_*）' }], returnType: 'int' },
+    'stream_socket_pair': { description: '创建一对相互连接的 socket（用于进程间通信）', signature: 'stream_socket_pair(int $domain, int $type, int $protocol): array', params: [{ name: '$domain', description: '协议族' }, { name: '$type', description: 'socket 类型' }, { name: '$protocol', description: '协议' }], returnType: 'array' },
+
+    // ---- openssl TLS/SSL (基于 mbedTLS 3.6.6, 当前暂停) ----
+    'openssl_ctx_new': { description: '创建 SSL Context（需 openssl 扩展）', signature: 'openssl_ctx_new(): Resource', params: [], returnType: 'Resource' },
+    'openssl_ctx_free': { description: '释放 SSL Context', signature: 'openssl_ctx_free(Resource $ctx): void', params: [{ name: '$ctx', description: 'SSL Context' }], returnType: 'void' },
+    'openssl_ctx_use_certificate_file': { description: '加载证书文件到 Context', signature: 'openssl_ctx_use_certificate_file(Resource $ctx, string $file, int $type): bool', params: [{ name: '$ctx', description: 'Context' }, { name: '$file', description: '证书文件' }, { name: '$type', description: '文件类型（X509_FILETYPE_*）' }], returnType: 'bool' },
+    'openssl_ctx_use_private_key_file': { description: '加载私钥文件到 Context', signature: 'openssl_ctx_use_private_key_file(Resource $ctx, string $file, int $type): bool', params: [{ name: '$ctx', description: 'Context' }, { name: '$file', description: '私钥文件' }, { name: '$type', description: '文件类型' }], returnType: 'bool' },
+    'openssl_ctx_set_verify': { description: '设置验证模式', signature: 'openssl_ctx_set_verify(Resource $ctx, int $mode): void', params: [{ name: '$ctx', description: 'Context' }, { name: '$mode', description: '验证模式（SSL_VERIFY_*）' }], returnType: 'void' },
+    'openssl_ctx_set_options': { description: '设置 SSL 选项', signature: 'openssl_ctx_set_options(Resource $ctx, int $options): void', params: [{ name: '$ctx', description: 'Context' }, { name: '$options', description: '选项（SSL_OP_*）' }], returnType: 'void' },
+    'openssl_ssl_new': { description: '创建 SSL Connection', signature: 'openssl_ssl_new(Resource $ctx): Resource', params: [{ name: '$ctx', description: 'SSL Context' }], returnType: 'Resource' },
+    'openssl_ssl_free': { description: '释放 SSL Connection', signature: 'openssl_ssl_free(Resource $ssl): void', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'void' },
+    'openssl_ssl_set_fd': { description: '绑定 socket fd 到 SSL Connection', signature: 'openssl_ssl_set_fd(Resource $ssl, int $fd): bool', params: [{ name: '$ssl', description: 'SSL Connection' }, { name: '$fd', description: 'socket fd' }], returnType: 'bool' },
+    'openssl_ssl_connect': { description: '客户端 TLS 握手', signature: 'openssl_ssl_connect(Resource $ssl): int', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'int' },
+    'openssl_ssl_accept': { description: '服务端 TLS 握手', signature: 'openssl_ssl_accept(Resource $ssl): int', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'int' },
+    'openssl_ssl_read': { description: 'TLS 加密读取', signature: 'openssl_ssl_read(Resource $ssl, int $length): string', params: [{ name: '$ssl', description: 'SSL Connection' }, { name: '$length', description: '最大长度' }], returnType: 'string' },
+    'openssl_ssl_write': { description: 'TLS 加密写入', signature: 'openssl_ssl_write(Resource $ssl, string $data): int', params: [{ name: '$ssl', description: 'SSL Connection' }, { name: '$data', description: '数据' }], returnType: 'int' },
+    'openssl_ssl_shutdown': { description: 'TLS 关闭握手', signature: 'openssl_ssl_shutdown(Resource $ssl): int', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'int' },
+    'openssl_ssl_get_cipher_name': { description: '返回当前使用的加密套件名', signature: 'openssl_ssl_get_cipher_name(Resource $ssl): string', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'string' },
+    'openssl_ssl_get_version': { description: '返回 TLS 版本', signature: 'openssl_ssl_get_version(Resource $ssl): string', params: [{ name: '$ssl', description: 'SSL Connection' }], returnType: 'string' },
+    'openssl_error_string': { description: '返回最后一次 OpenSSL 错误描述', signature: 'openssl_error_string(): string', params: [], returnType: 'string' },
+    'openssl_encrypt': { description: '对称加密', signature: 'openssl_encrypt(string $data, string $method, string $key, int $options, string $iv): string', params: [{ name: '$data', description: '明文' }, { name: '$method', description: '加密方法' }, { name: '$key', description: '密钥' }, { name: '$options', description: '选项（OPENSSL_*）' }, { name: '$iv', description: '初始向量' }], returnType: 'string' },
+    'openssl_decrypt': { description: '对称解密', signature: 'openssl_decrypt(string $data, string $method, string $key, int $options, string $iv): string', params: [{ name: '$data', description: '密文' }, { name: '$method', description: '解密方法' }, { name: '$key', description: '密钥' }, { name: '$options', description: '选项' }, { name: '$iv', description: '初始向量' }], returnType: 'string' },
+    'openssl_random_pseudo_bytes': { description: '生成密码学安全的随机字节', signature: 'openssl_random_pseudo_bytes(int $length): string', params: [{ name: '$length', description: '字节数' }], returnType: 'string' },
+    'openssl_digest': { description: '计算摘要（哈希）', signature: 'openssl_digest(string $data, string $method, bool $raw_output): string', params: [{ name: '$data', description: '数据' }, { name: '$method', description: '摘要方法' }, { name: '$raw_output', description: '是否返回原始二进制' }], returnType: 'string' },
+
+    // ---- 其他函数 ----
+    'print_r': {
+        description: '打印变量可读信息（无 $return 参数）',
+        signature: 'print_r(mixed $value): void',
+        params: [{ name: '$value', description: '要打印的值' }],
+        returnType: 'void'
+    },
+    'strtr2': {
+        description: '字符映射替换（从->到），逐字符替换',
+        signature: 'strtr2(string $string, string $from, string $to): string',
+        params: [
+            { name: '$string', description: '目标字符串' },
+            { name: '$from', description: '源字符集' },
+            { name: '$to', description: '目标字符集' }
+        ],
+        returnType: 'string'
+    },
 };
 
 // ============================================================================
@@ -1077,6 +1543,10 @@ const preprocessorDocs: Record<string, string> = {
     '#import': '**#import name**\n按需引入扩展（自动加载 ext/name/src/*.php + *.c）\n\n**可用扩展**: `pcntl` (POSIX 进程控制), `posix` (POSIX 系统), `pcre` (正则表达式), `exif` (EXIF 元数据)\n\n示例: `#import pcntl`',
     '#cstruct': '**#cstruct Name { C.type field; ... }**\n声明 C 结构体字段布局。`$p->field` 编译期展开为 `((Name*)$p)->field`，无需 C getter/setter。\n\n**字段格式**: `C.type name` 或 `StructName name`（嵌套值类型）\n\n示例:\n```\n#cstruct Point {\n    C.double x;\n    C.double y;\n}\n```',
     '#debug': '**#debug text**\n仅在 --debug 模式下输出（用于测试预期输出）\n\n`#debug ~ text` — 近似匹配（时间/时区相关）',
+    '#if': '**#if condition**\n\n条件编译开始。条件表达式支持 `!`、`&&`、`||`、`()` 组合和标识符（大小写不敏感）。\n\n**标识符**: `Windows`/`Win`/`Linux`/`MacOS`/`Darwin`/`Mac` (OS)、`TCC`/`TinyC`/`GCC`/`Clang` (编译器)、`x86_64`/`amd64`/`x64`/`aarch64`/`arm64` (架构)、`debug`/`prod` (模式)。未知标识符视为 `false`。\n\n可出现在**顶层**（包裹 #include/#flag/#callback/#cstruct/class/function/const/enum）和**函数体内**（包裹任意语句）。非命中分支的 token 直接跳过（不解析、不类型检查、不生成 C 代码），与 V 语言 `$if` 默认行为一致。',
+    '#elseif': '**#elseif condition**\n\n条件编译分支（别名 `#elif`）。与 `#if` 配合使用，条件表达式语法同 `#if`。',
+    '#else': '**#else**\n\n条件编译 else 分支。与 `#if` / `#elseif` 配合使用。',
+    '#endif': '**#endif**\n\n条件编译结束标记。每个 `#if` 必须有对应的 `#endif`。',
 };
 
 // ============================================================================
@@ -1103,6 +1573,302 @@ const cTypeDocs: Record<string, string> = {
     'C.char*': '**C.char*** → `char*`\nC 字符串指针',
     'C.int*': '**C.int*** → `int*`\nC int 指针',
 };
+
+// ============================================================================
+// TinyPHP 扩展常量文档（基于 FUNCTIONS.md 各扩展常量表）
+// ============================================================================
+
+interface ConstantDoc {
+    description: string;
+    value: string;      // 值的字符串表示（用于 Hover 显示）
+    category: string;   // 分类
+}
+
+const constantDocs: Record<string, ConstantDoc> = {
+    // ---- Filter 常量 ----
+    'FILTER_VALIDATE_INT': { value: '257', description: '验证 int', category: 'Filter' },
+    'FILTER_VALIDATE_BOOL': { value: '258', description: '验证 bool', category: 'Filter' },
+    'FILTER_VALIDATE_FLOAT': { value: '259', description: '验证 float', category: 'Filter' },
+    'FILTER_VALIDATE_REGEXP': { value: '272', description: '验证正则表达式', category: 'Filter' },
+    'FILTER_VALIDATE_URL': { value: '273', description: '验证 URL', category: 'Filter' },
+    'FILTER_VALIDATE_EMAIL': { value: '274', description: '验证 email', category: 'Filter' },
+    'FILTER_VALIDATE_IP': { value: '275', description: '验证 IP 地址', category: 'Filter' },
+    'FILTER_VALIDATE_MAC': { value: '276', description: '验证 MAC 地址', category: 'Filter' },
+    'FILTER_VALIDATE_DOMAIN': { value: '277', description: '验证域名', category: 'Filter' },
+    'FILTER_SANITIZE_STRING': { value: '513', description: '净化字符串（去除标签）', category: 'Filter' },
+    'FILTER_SANITIZE_ENCODED': { value: '514', description: 'URL 编码净化', category: 'Filter' },
+    'FILTER_SANITIZE_SPECIAL_CHARS': { value: '515', description: '净化特殊字符', category: 'Filter' },
+    'FILTER_SANITIZE_EMAIL': { value: '517', description: '净化 email（去除非法字符）', category: 'Filter' },
+    'FILTER_SANITIZE_URL': { value: '518', description: '净化 URL', category: 'Filter' },
+    'FILTER_SANITIZE_NUMBER_INT': { value: '519', description: '净化为整数（去除符号外字符）', category: 'Filter' },
+    'FILTER_SANITIZE_NUMBER_FLOAT': { value: '520', description: '净化为浮点数', category: 'Filter' },
+    'FILTER_SANITIZE_ADD_SLASHES': { value: '523', description: '添加斜杠转义', category: 'Filter' },
+    'FILTER_SANITIZE_FULL_SPECIAL_CHARS': { value: '522', description: '净化全部特殊字符（等价 htmlspecialchars）', category: 'Filter' },
+    'FILTER_FLAG_ALLOW_OCTAL': { value: '1', description: '允许八进制（配合 FILTER_VALIDATE_INT）', category: 'Filter' },
+    'FILTER_FLAG_ALLOW_HEX': { value: '2', description: '允许十六进制（配合 FILTER_VALIDATE_INT）', category: 'Filter' },
+    'FILTER_FLAG_STRIP_LOW': { value: '4', description: '去除 ASCII <32 字符', category: 'Filter' },
+    'FILTER_FLAG_STRIP_HIGH': { value: '8', description: '去除 ASCII >127 字符', category: 'Filter' },
+    'FILTER_FLAG_ENCODE_LOW': { value: '16', description: '编码 ASCII <32 字符', category: 'Filter' },
+    'FILTER_FLAG_ENCODE_HIGH': { value: '32', description: '编码 ASCII >127 字符', category: 'Filter' },
+    'FILTER_FLAG_ENCODE_AMP': { value: '64', description: '编码 & 为 &amp;', category: 'Filter' },
+    'FILTER_FLAG_NO_ENCODE_QUOTES': { value: '128', description: '不编码引号', category: 'Filter' },
+    'FILTER_FLAG_EMPTY_STRING_NULL': { value: '256', description: '空字符串返回 null', category: 'Filter' },
+    'FILTER_FLAG_ALLOW_THOUSAND': { value: '8192', description: '允许千位分隔符', category: 'Filter' },
+    'FILTER_FLAG_ALLOW_SCIENTIFIC': { value: '16384', description: '允许科学计数法', category: 'Filter' },
+    'FILTER_FLAG_PATH_REQUIRED': { value: '0x100000', description: '要求 URL 含路径', category: 'Filter' },
+    'FILTER_FLAG_QUERY_REQUIRED': { value: '0x200000', description: '要求 URL 含查询串', category: 'Filter' },
+    'FILTER_FLAG_IPV4': { value: '0x100000', description: '仅 IPv4', category: 'Filter' },
+    'FILTER_FLAG_IPV6': { value: '0x200000', description: '仅 IPv6', category: 'Filter' },
+
+    // ---- Pcre 常量 ----
+    'PREG_PATTERN_ORDER': { value: '1', description: '结果按模式排序（preg_match_all）', category: 'Pcre' },
+    'PREG_SET_ORDER': { value: '2', description: '结果按匹配排序（preg_match_all）', category: 'Pcre' },
+    'PREG_SPLIT_NO_EMPTY': { value: '1', description: 'preg_split 仅返回非空片段', category: 'Pcre' },
+    'PREG_SPLIT_DELIM_CAPTURE': { value: '2', description: 'preg_split 捕获分隔符', category: 'Pcre' },
+    'PREG_GREP_INVERT': { value: '1', description: 'preg_grep 返回不匹配项', category: 'Pcre' },
+    'PREG_NO_ERROR': { value: '0', description: '无错误', category: 'Pcre' },
+    'PREG_INTERNAL_ERROR': { value: '1', description: '内部错误', category: 'Pcre' },
+    'PREG_BACKTRACK_LIMIT_ERROR': { value: '2', description: '回溯上限错误', category: 'Pcre' },
+    'PREG_RECURSION_LIMIT_ERROR': { value: '3', description: '递归上限错误', category: 'Pcre' },
+
+    // ---- Zlib 常量 — 编码格式 ----
+    'ZLIB_ENCODING_RAW': { value: '-15', description: '原始 DEFLATE（RFC 1951）', category: 'Zlib' },
+    'ZLIB_ENCODING_GZIP': { value: '31', description: 'gzip 格式（RFC 1952）', category: 'Zlib' },
+    'ZLIB_ENCODING_DEFLATE': { value: '15', description: 'zlib 格式（RFC 1950）', category: 'Zlib' },
+    'FORCE_GZIP': { value: '31', description: 'ZLIB_ENCODING_GZIP 别名', category: 'Zlib' },
+    'FORCE_DEFLATE': { value: '15', description: 'ZLIB_ENCODING_DEFLATE 别名', category: 'Zlib' },
+    // ---- Zlib 常量 — 压缩级别 ----
+    'ZLIB_NO_COMPRESSION': { value: '0', description: '不压缩', category: 'Zlib' },
+    'ZLIB_BEST_SPEED': { value: '1', description: '最快速度', category: 'Zlib' },
+    'ZLIB_BEST_COMPRESSION': { value: '9', description: '最小体积', category: 'Zlib' },
+    'ZLIB_DEFAULT_COMPRESSION': { value: '-1', description: '默认级别（=6）', category: 'Zlib' },
+    // ---- Zlib 常量 — flush 模式 ----
+    'ZLIB_NO_FLUSH': { value: '0', description: '不刷新', category: 'Zlib' },
+    'ZLIB_PARTIAL_FLUSH': { value: '1', description: '部分刷新', category: 'Zlib' },
+    'ZLIB_SYNC_FLUSH': { value: '2', description: '同步刷新（deflate_add/inflate_add 默认）', category: 'Zlib' },
+    'ZLIB_FULL_FLUSH': { value: '3', description: '完全刷新', category: 'Zlib' },
+    'ZLIB_FINISH': { value: '4', description: '结束输入', category: 'Zlib' },
+    'ZLIB_BLOCK': { value: '5', description: '块模式', category: 'Zlib' },
+    // ---- Zlib 常量 — 压缩策略 ----
+    'ZLIB_FILTERED': { value: '1', description: '过滤策略', category: 'Zlib' },
+    'ZLIB_HUFFMAN_ONLY': { value: '2', description: '仅 Huffman', category: 'Zlib' },
+    'ZLIB_RLE': { value: '3', description: 'RLE 策略', category: 'Zlib' },
+    'ZLIB_FIXED': { value: '4', description: '固定 Huffman', category: 'Zlib' },
+    'ZLIB_DEFAULT_STRATEGY': { value: '0', description: '默认策略', category: 'Zlib' },
+    // ---- Zlib 常量 — 状态码 ----
+    'ZLIB_OK': { value: '0', description: '成功', category: 'Zlib' },
+    'ZLIB_STREAM_END': { value: '1', description: '流结束', category: 'Zlib' },
+    'ZLIB_NEED_DICT': { value: '2', description: '需要字典', category: 'Zlib' },
+    'ZLIB_ERRNO': { value: '-1', description: '系统错误', category: 'Zlib' },
+    'ZLIB_STREAM_ERROR': { value: '-2', description: '流错误', category: 'Zlib' },
+    'ZLIB_DATA_ERROR': { value: '-3', description: '数据错误', category: 'Zlib' },
+    'ZLIB_MEM_ERROR': { value: '-4', description: '内存错误', category: 'Zlib' },
+    'ZLIB_BUF_ERROR': { value: '-5', description: '缓冲区错误', category: 'Zlib' },
+    'ZLIB_VERSION_ERROR': { value: '-6', description: '版本不兼容', category: 'Zlib' },
+    // ---- Zlib 常量 — 其他 ----
+    'ZLIB_VERSION': { value: '"1.3.2"', description: 'zlib 版本字符串', category: 'Zlib' },
+    'ZLIB_VERNUM': { value: '0x1320', description: 'zlib 版本号', category: 'Zlib' },
+
+    // ---- Zip 常量 — 打开模式 ----
+    'ZIP_CREATE': { value: '1', description: '创建新文件', category: 'Zip' },
+    'ZIP_EXCL': { value: '2', description: '排他创建（存在则失败）', category: 'Zip' },
+    'ZIP_CHECKCONS': { value: '4', description: '检查一致性', category: 'Zip' },
+    'ZIP_TRUNCATE': { value: '8', description: '截断（覆盖）', category: 'Zip' },
+    'ZIP_RDONLY': { value: '16', description: '只读', category: 'Zip' },
+    // ---- Zip 常量 — 标志位 ----
+    'ZIP_FL_OVERWRITE': { value: '1', description: '覆盖现有文件', category: 'Zip' },
+    'ZIP_FL_NOCASE': { value: '2', description: '不区分大小写', category: 'Zip' },
+    'ZIP_FL_NODIR': { value: '4', description: '不为目录创建条目', category: 'Zip' },
+    'ZIP_FL_COMPRESSED': { value: '8', description: '读取压缩数据', category: 'Zip' },
+    'ZIP_FL_UNCHANGED': { value: '16', description: '使用原始数据', category: 'Zip' },
+    // ---- Zip 常量 — 压缩方法 ----
+    'ZIP_CM_DEFAULT': { value: '-1', description: '默认压缩方法', category: 'Zip' },
+    'ZIP_CM_STORE': { value: '0', description: '不压缩（Stored）', category: 'Zip' },
+    'ZIP_CM_DEFLATE': { value: '8', description: 'DEFLATE 压缩', category: 'Zip' },
+
+    // ---- Stream 常量 — Socket 类型 ----
+    'STREAM_SOCK_STREAM': { value: '1', description: 'TCP 流 socket', category: 'Stream' },
+    'STREAM_SOCK_DGRAM': { value: '2', description: 'UDP 数据报 socket', category: 'Stream' },
+    'STREAM_SOCK_RAW': { value: '3', description: '原始 socket', category: 'Stream' },
+    'STREAM_SOCK_RDM': { value: '4', description: '可靠数据报', category: 'Stream' },
+    'STREAM_SOCK_SEQPACKET': { value: '5', description: '顺序包 socket', category: 'Stream' },
+    // ---- Stream 常量 — 协议族 ----
+    'STREAM_PF_INET': { value: '2', description: 'IPv4', category: 'Stream' },
+    'STREAM_PF_INET6': { value: '10', description: 'IPv6', category: 'Stream' },
+    'STREAM_PF_UNIX': { value: '1', description: 'Unix 域 socket', category: 'Stream' },
+    // ---- Stream 常量 — IP 协议 ----
+    'STREAM_IPPROTO_IP': { value: '0', description: 'IP 协议', category: 'Stream' },
+    'STREAM_IPPROTO_TCP': { value: '6', description: 'TCP', category: 'Stream' },
+    'STREAM_IPPROTO_UDP': { value: '17', description: 'UDP', category: 'Stream' },
+    'STREAM_IPPROTO_ICMP': { value: '1', description: 'ICMP', category: 'Stream' },
+    'STREAM_IPPROTO_RAW': { value: '255', description: '原始 IP', category: 'Stream' },
+    // ---- Stream 常量 — Crypto (TLS) ----
+    'STREAM_CRYPTO_METHOD_TLS_CLIENT': { value: '57', description: 'TLS 客户端（任意版本）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_TLS_SERVER': { value: '56', description: 'TLS 服务端（任意版本）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv2_CLIENT': { value: '0', description: 'SSLv2 客户端（已废弃）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv3_CLIENT': { value: '0', description: 'SSLv3 客户端（已废弃）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv23_CLIENT': { value: '57', description: 'SSLv23 客户端（TLS 别名）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv2_SERVER': { value: '0', description: 'SSLv2 服务端（已废弃）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv3_SERVER': { value: '0', description: 'SSLv3 服务端（已废弃）', category: 'Stream' },
+    'STREAM_CRYPTO_METHOD_SSLv23_SERVER': { value: '56', description: 'SSLv23 服务端（TLS 别名）', category: 'Stream' },
+    'STREAM_CRYPTO_PROTO_TLSv1_0': { value: '1', description: 'TLS 1.0', category: 'Stream' },
+    'STREAM_CRYPTO_PROTO_TLSv1_1': { value: '2', description: 'TLS 1.1', category: 'Stream' },
+    'STREAM_CRYPTO_PROTO_TLSv1_2': { value: '4', description: 'TLS 1.2', category: 'Stream' },
+    'STREAM_CRYPTO_PROTO_TLSv1_3': { value: '8', description: 'TLS 1.3', category: 'Stream' },
+    'STREAM_CRYPTO_ENABLE': { value: '1', description: '启用 TLS', category: 'Stream' },
+    'STREAM_CRYPTO_DISABLE': { value: '0', description: '禁用 TLS', category: 'Stream' },
+    // ---- Stream 常量 — shutdown 模式 ----
+    'STREAM_SHUT_RD': { value: '0', description: '关闭读方向', category: 'Stream' },
+    'STREAM_SHUT_WR': { value: '1', description: '关闭写方向', category: 'Stream' },
+    'STREAM_SHUT_RDWR': { value: '2', description: '关闭读写方向', category: 'Stream' },
+
+    // ---- OpenSSL 常量 — SSL 选项 ----
+    'SSL_OP_NO_SSLv2': { value: '0x01000000', description: '禁用 SSLv2', category: 'OpenSSL' },
+    'SSL_OP_NO_SSLv3': { value: '0x02000000', description: '禁用 SSLv3', category: 'OpenSSL' },
+    'SSL_OP_NO_TLSv1': { value: '0x04000000', description: '禁用 TLSv1.0', category: 'OpenSSL' },
+    'SSL_OP_NO_TLSv1_1': { value: '0x10000000', description: '禁用 TLSv1.1', category: 'OpenSSL' },
+    'SSL_OP_NO_TLSv1_2': { value: '0x08000000', description: '禁用 TLSv1.2', category: 'OpenSSL' },
+    'SSL_OP_NO_TLSv1_3': { value: '0x20000000', description: '禁用 TLSv1.3', category: 'OpenSSL' },
+    'SSL_OP_NO_COMPRESSION': { value: '0x00020000', description: '禁用压缩', category: 'OpenSSL' },
+    'SSL_OP_SINGLE_DH_USE': { value: '0x00100000', description: '单次 DH 使用', category: 'OpenSSL' },
+    // ---- OpenSSL 常量 — 验证模式 ----
+    'SSL_VERIFY_NONE': { value: '0x00', description: '不验证', category: 'OpenSSL' },
+    'SSL_VERIFY_PEER': { value: '0x01', description: '验证对端证书', category: 'OpenSSL' },
+    'SSL_VERIFY_FAIL_IF_NO_PEER_CERT': { value: '0x02', description: '无证书则失败', category: 'OpenSSL' },
+    // ---- OpenSSL 常量 — 文件/密钥类型 ----
+    'X509_FILETYPE_PEM': { value: '1', description: 'PEM 格式', category: 'OpenSSL' },
+    'X509_FILETYPE_ASN1': { value: '2', description: 'ASN1 格式', category: 'OpenSSL' },
+    'X509_FILETYPE_DEFAULT': { value: '3', description: '默认格式', category: 'OpenSSL' },
+    'SSL_FILETYPE_PEM': { value: '1', description: 'PEM 密钥格式', category: 'OpenSSL' },
+    'SSL_FILETYPE_ASN1': { value: '2', description: 'ASN1 密钥格式', category: 'OpenSSL' },
+    // ---- OpenSSL 常量 — 加密算法 ----
+    'OPENSSL_DUMMY_ALGO': { value: '0', description: '无算法（占位）', category: 'OpenSSL' },
+    'OPENSSL_RAW_DATA': { value: '1', description: '原始数据（不做 base64）', category: 'OpenSSL' },
+    'OPENSSL_ZERO_PADDING': { value: '2', description: '零填充', category: 'OpenSSL' },
+
+    // ---- Calendar 常量 ----
+    'CAL_GREGORIAN': { value: '0', description: '公历（Gregorian）', category: 'Calendar' },
+    'CAL_JULIAN': { value: '1', description: '儒略历（Julian）', category: 'Calendar' },
+    'CAL_JEWISH': { value: '2', description: '犹太历（Jewish/Hebrew）', category: 'Calendar' },
+    'CAL_FRENCH': { value: '3', description: '法国共和历', category: 'Calendar' },
+    'CAL_JEWISH_ADD_ALAFIM_GERESH': { value: '4', description: '犹太历添加 Alafim Geresh', category: 'Calendar' },
+    'CAL_NUM_CALS': { value: '4', description: '日历类型数量', category: 'Calendar' },
+    'CAL_EASTER_DEFAULT': { value: '0', description: '默认复活节算法', category: 'Calendar' },
+    'CAL_EASTER_ROMAN': { value: '1', description: '罗马复活节算法', category: 'Calendar' },
+    'CAL_EASTER_ALWAYS_GREGORIAN': { value: '2', description: '始终用公历算复活节', category: 'Calendar' },
+    'CAL_EASTER_ALWAYS_JULIAN': { value: '3', description: '始终用儒略历算复活节', category: 'Calendar' },
+
+    // ---- Exif 常量 — 图像类型 ----
+    'IMAGETYPE_GIF': { value: '1', description: 'GIF 图像', category: 'Exif' },
+    'IMAGETYPE_JPEG': { value: '2', description: 'JPEG 图像', category: 'Exif' },
+    'IMAGETYPE_PNG': { value: '3', description: 'PNG 图像', category: 'Exif' },
+    'IMAGETYPE_BMP': { value: '6', description: 'BMP 图像', category: 'Exif' },
+    'IMAGETYPE_TIFF_II': { value: '7', description: 'TIFF（Intel 字节序）', category: 'Exif' },
+    'IMAGETYPE_TIFF_MM': { value: '8', description: 'TIFF（Motorola 字节序）', category: 'Exif' },
+    'IMAGETYPE_WEBP': { value: '18', description: 'WebP 图像', category: 'Exif' },
+    // ---- Exif 常量 — EXIF 数据类型 ----
+    'EXIF_TYPE_BYTE': { value: '1', description: 'BYTE 类型', category: 'Exif' },
+    'EXIF_TYPE_ASCII': { value: '2', description: 'ASCII 类型', category: 'Exif' },
+    'EXIF_TYPE_SHORT': { value: '3', description: 'SHORT 类型', category: 'Exif' },
+    'EXIF_TYPE_LONG': { value: '4', description: 'LONG 类型', category: 'Exif' },
+    'EXIF_TYPE_RATIONAL': { value: '5', description: 'RATIONAL 类型', category: 'Exif' },
+    'EXIF_TYPE_UNDEFINED': { value: '7', description: 'UNDEFINED 类型', category: 'Exif' },
+    'EXIF_TYPE_SLONG': { value: '9', description: 'SLONG 类型', category: 'Exif' },
+    'EXIF_TYPE_SRATIONAL': { value: '10', description: 'SRATIONAL 类型', category: 'Exif' },
+
+    // ---- Fileinfo 常量 ----
+    'FILEINFO_NONE': { value: '0', description: '无特殊标志', category: 'Fileinfo' },
+    'FILEINFO_SYMLINK': { value: '2', description: '跟随符号链接', category: 'Fileinfo' },
+    'FILEINFO_DEVICES': { value: '8', description: '检测设备文件', category: 'Fileinfo' },
+    'FILEINFO_MIME_TYPE': { value: '16', description: '返回 MIME 类型', category: 'Fileinfo' },
+    'FILEINFO_CONTINUE': { value: '32', description: '返回全部匹配（不止第一个）', category: 'Fileinfo' },
+    'FILEINFO_PRESERVE_ATIME': { value: '128', description: '保留 atime', category: 'Fileinfo' },
+    'FILEINFO_RAW': { value: '256', description: '返回原始值（不做净化）', category: 'Fileinfo' },
+    'FILEINFO_MIME_ENCODING': { value: '1024', description: '返回 MIME 编码', category: 'Fileinfo' },
+    'FILEINFO_MIME': { value: '1040', description: '返回 MIME 类型+编码', category: 'Fileinfo' },
+    'FILEINFO_EXTENSION': { value: '16777216', description: '返回文件扩展名', category: 'Fileinfo' },
+
+    // ---- Iconv 常量 ----
+    'ICONV_IMPL': { value: '"iconv"', description: 'iconv 实现名称', category: 'Iconv' },
+    'ICONV_VERSION': { value: '"1.0"', description: 'iconv 版本', category: 'Iconv' },
+
+    // ---- Seek 常量（用于 gzseek） ----
+    'SEEK_SET': { value: '0', description: '从文件头定位', category: 'Seek' },
+    'SEEK_CUR': { value: '1', description: '从当前位置定位', category: 'Seek' },
+    'SEEK_END': { value: '2', description: '从文件尾定位', category: 'Seek' },
+};
+
+// ============================================================================
+// TinyPHP 类方法文档（基于 FUNCTIONS.md + GRAMMAR.md §14.4）
+// ============================================================================
+
+interface ClassMethodDoc {
+    className: string;
+    methodName: string;
+    description: string;
+    signature: string;
+    params: { name: string; description: string }[];
+    returnType: string;
+    isStatic: boolean;
+    isProperty: boolean;  // true 表示是属性而非方法
+}
+
+const classMethodDocs: ClassMethodDoc[] = [
+    // ---- Generator 类方法 ----
+    { className: 'Generator', methodName: 'current', description: '返回当前 yield 的值', signature: 'current(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'key', description: '返回当前 yield 的键', signature: 'key(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'next', description: '推进生成器到下一个 yield', signature: 'next(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'send', description: '向生成器发送值并推进到下一个 yield，返回 yield 的值', signature: 'send(mixed $value): mixed', params: [{ name: '$value', description: '发送给生成器的值（作为上一个 yield 表达式的结果）' }], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'valid', description: '检查生成器是否还有更多值', signature: 'valid(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'getReturn', description: '返回生成器的 return 值（生成器结束后可用）', signature: 'getReturn(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Generator', methodName: 'rewind', description: '倒回生成器到第一个 yield（仅在未启动时可用）', signature: 'rewind(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+
+    // ---- Thread 类方法 ----
+    { className: 'Thread', methodName: '__construct', description: '创建线程，传入线程函数（闭包）', signature: '__construct(callable $fn)', params: [{ name: '$fn', description: '线程执行的闭包' }], returnType: '', isStatic: false, isProperty: false },
+    { className: 'Thread', methodName: 'start', description: '启动线程', signature: 'start(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Thread', methodName: 'join', description: '等待线程结束并回收资源', signature: 'join(): int', params: [], returnType: 'int', isStatic: false, isProperty: false },
+    { className: 'Thread', methodName: 'detach', description: '分离线程（不再可 join）', signature: 'detach(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Thread', methodName: 'yield', description: '让出 CPU 时间片（静态方法）', signature: 'static yield(): void', params: [], returnType: 'void', isStatic: true, isProperty: false },
+    { className: 'Thread', methodName: 'sleep', description: '当前线程休眠指定秒数（静态方法）', signature: 'static sleep(float $seconds): void', params: [{ name: '$seconds', description: '休眠秒数（支持小数）' }], returnType: 'void', isStatic: true, isProperty: false },
+    { className: 'Thread', methodName: 'id', description: '返回当前线程 ID（静态方法）', signature: 'static id(): int', params: [], returnType: 'int', isStatic: true, isProperty: false },
+
+    // ---- Mutex 类方法 ----
+    { className: 'Mutex', methodName: '__construct', description: '创建互斥锁', signature: '__construct(bool $recursive = false)', params: [{ name: '$recursive', description: '是否允许递归加锁（同线程多次 lock）' }], returnType: '', isStatic: false, isProperty: false },
+    { className: 'Mutex', methodName: 'lock', description: '加锁（阻塞直到获取）', signature: 'lock(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Mutex', methodName: 'tryLock', description: '尝试加锁（非阻塞，失败返回 false）', signature: 'tryLock(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Mutex', methodName: 'unlock', description: '解锁', signature: 'unlock(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+
+    // ---- CondVar 类方法 ----
+    { className: 'CondVar', methodName: '__construct', description: '创建条件变量', signature: '__construct()', params: [], returnType: '', isStatic: false, isProperty: false },
+    { className: 'CondVar', methodName: 'wait', description: '等待条件变量（需先持有 Mutex，调用时释放 Mutex，被唤醒时重新获取）', signature: 'wait(Mutex $m): bool', params: [{ name: '$m', description: '关联的 Mutex（调用时释放，返回时重新获取）' }], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'CondVar', methodName: 'signal', description: '唤醒一个等待的线程', signature: 'signal(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'CondVar', methodName: 'broadcast', description: '唤醒所有等待的线程', signature: 'broadcast(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+
+    // ---- WaitGroup 类方法 ----
+    { className: 'WaitGroup', methodName: '__construct', description: '创建 WaitGroup（类似 Go）', signature: '__construct()', params: [], returnType: '', isStatic: false, isProperty: false },
+    { className: 'WaitGroup', methodName: 'add', description: '增加等待计数', signature: 'add(int $delta): void', params: [{ name: '$delta', description: '计数增量（通常为 1，可为负表示完成）' }], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'WaitGroup', methodName: 'done', description: '标记一个等待完成（计数减 1）', signature: 'done(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'WaitGroup', methodName: 'wait', description: '阻塞直到计数归零', signature: 'wait(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+
+    // ---- Exception 类方法 ----
+    { className: 'Exception', methodName: 'getMessage', description: '返回异常消息', signature: 'getMessage(): string', params: [], returnType: 'string', isStatic: false, isProperty: false },
+    { className: 'Exception', methodName: 'getCode', description: '返回异常代码', signature: 'getCode(): int', params: [], returnType: 'int', isStatic: false, isProperty: false },
+    { className: 'Exception', methodName: 'getFile', description: '返回抛出异常的文件路径', signature: 'getFile(): string', params: [], returnType: 'string', isStatic: false, isProperty: false },
+    { className: 'Exception', methodName: 'getLine', description: '返回抛出异常的行号', signature: 'getLine(): int', params: [], returnType: 'int', isStatic: false, isProperty: false },
+    { className: 'Exception', methodName: 'getPrevious', description: '返回前一个异常（异常链），无则返回 null', signature: 'getPrevious(): Exception', params: [], returnType: 'Exception', isStatic: false, isProperty: false },
+
+    // ---- Resource 类方法 ----
+    { className: 'Resource', methodName: 'getType', description: '返回资源类型名称', signature: 'getType(): string', params: [], returnType: 'string', isStatic: false, isProperty: false },
+    { className: 'Resource', methodName: 'isOpen', description: '检查资源是否仍打开', signature: 'isOpen(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Resource', methodName: 'close', description: '关闭资源（RAII 析构时自动调用）', signature: 'close(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+
+    // ---- AnnotationEntry 类属性与方法（GRAMMAR.md §14.4） ----
+    { className: 'AnnotationEntry', methodName: 'data', description: '位置参数数组（注解使用时传入的参数）', signature: '$data: array', params: [], returnType: 'array', isStatic: false, isProperty: true },
+    { className: 'AnnotationEntry', methodName: 'type', description: '目标类型：method / static_method / class / function', signature: '$type: string', params: [], returnType: 'string', isStatic: false, isProperty: true },
+    { className: 'AnnotationEntry', methodName: 'name', description: '限定名：Ns\\Class->method / Ns\\Class::staticMethod / Ns\\func / Ns\\Class', signature: '$name: string', params: [], returnType: 'string', isStatic: false, isProperty: true },
+    { className: 'AnnotationEntry', methodName: 'call', description: '调用目标方法/静态方法/函数（class 目标报错）。编译期零开销直接调用', signature: 'call(...$args): mixed', params: [{ name: '...$args', description: '调用参数' }], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'AnnotationEntry', methodName: 'newInstance', description: '实例化目标类（非 class 目标报错）。返回精确类类型', signature: 'newInstance(...$args): object', params: [{ name: '...$args', description: '构造参数' }], returnType: 'object', isStatic: false, isProperty: false },
+];
 
 // ============================================================================
 // 不支持特性的诊断提示
@@ -1252,6 +2018,30 @@ function buildCompletionItems(): CompletionItem[] {
             kind: CompletionItemKind.Constant,
             detail: 'Magic Constant',
             data: 'constant'
+        });
+    }
+
+    // ---- 扩展常量（Filter/Pcre/Zlib/Zip/Stream/OpenSSL/Calendar/Exif/Fileinfo/Iconv/Seek）----
+    for (let [name, doc] of Object.entries(constantDocs)) {
+        items.push({
+            label: name,
+            kind: CompletionItemKind.Constant,
+            detail: `${doc.value} (${doc.category})`,
+            insertText: name,
+            data: 'constant'
+        });
+    }
+
+    // ---- 类方法/属性签名（Generator/Thread/Mutex/CondVar/WaitGroup/Exception/Resource/AnnotationEntry）----
+    for (let m of classMethodDocs) {
+        const sep = m.isStatic ? '::' : '->';
+        items.push({
+            label: `${m.className}${sep}${m.methodName}`,
+            kind: m.isProperty ? CompletionItemKind.Property : CompletionItemKind.Method,
+            detail: m.signature,
+            insertText: m.methodName,
+            insertTextFormat: InsertTextFormat.PlainText,
+            data: 'class-method'
         });
     }
 
@@ -1616,6 +2406,30 @@ export function getCTypeDocumentation(name: string): string | null {
 
 export function getPreprocessorDocumentation(name: string): string | null {
     return preprocessorDocs[name] || null;
+}
+
+export function getConstantDocumentation(name: string): string | null {
+    const doc = constantDocs[name];
+    if (!doc) return null;
+    return `**${name}** = \`${doc.value}\`\n\n${doc.description}\n\n*Category: ${doc.category}*`;
+}
+
+export function getClassMethodDocumentation(className: string, methodName: string): string | null {
+    const doc = classMethodDocs.find(d => d.className === className && d.methodName === methodName);
+    if (!doc) return null;
+    const sep = doc.isStatic ? '::' : '->';
+    let md = `### ${className}${sep}${methodName}\n\n${doc.description}\n\n`;
+    md += `\`${doc.signature}\`\n\n`;
+    if (doc.params.length > 0) {
+        md += '**参数:**\n\n';
+        for (const p of doc.params) md += `- \`${p.name}\` — ${p.description}\n`;
+    }
+    md += `\n**返回值:** \`${doc.returnType || 'void'}\``;
+    return md;
+}
+
+export function getAllConstants(): { name: string; value: string; description: string; category: string }[] {
+    return Object.entries(constantDocs).map(([name, doc]) => ({ name, ...doc }));
 }
 
 // 获取函数返回类型（用于 Inlay Hint 推导 $x = func() 的类型）

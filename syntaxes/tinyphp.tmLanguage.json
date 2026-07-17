@@ -95,6 +95,30 @@
                     ]
                 },
                 {
+                    "comment": "#if / #elseif / #elif / #else / #endif — conditional compilation (GRAMMAR.md §11.1)",
+                    "name": "meta.preprocessor.conditional.tinyphp",
+                    "match": "^\\s*(#(?:if|elseif|elif|else|endif))\\b(.*)$",
+                    "captures": {
+                        "1": { "name": "keyword.control.import.tinyphp" },
+                        "2": {
+                            "patterns": [
+                                {
+                                    "name": "keyword.operator.logical.tinyphp",
+                                    "match": "&&|\\|\\||!"
+                                },
+                                {
+                                    "name": "constant.language.platform.tinyphp",
+                                    "match": "\\b(Windows|Win|Linux|MacOS|Darwin|Mac|TCC|TinyC|GCC|Clang|x86_64|amd64|x64|aarch64|arm64|debug|prod)\\b"
+                                },
+                                {
+                                    "name": "punctuation.parenthesis.tinyphp",
+                                    "match": "[()]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
                     "comment": "#callback / #import / #debug",
                     "name": "meta.preprocessor.tinyphp",
                     "match": "^\\s*(#(?:callback|import|debug))\\b.*$",
@@ -134,6 +158,18 @@
                         "5": { "name": "keyword.operator.assignment.php" },
                         "6": { "name": "constant.language.array.empty.php" },
                         "7": { "name": "punctuation.terminator.statement.php" }
+                    }
+                },
+                {
+                    "comment": "#[Export(\"name\")] — function export annotation (GRAMMAR.md §15)",
+                    "name": "meta.annotation.export.tinyphp",
+                    "match": "(#\\[)(Export)\\s*\\(\\s*(\")([^\"]+)(\")\\s*\\]",
+                    "captures": {
+                        "1": { "name": "punctuation.definition.annotation.begin.tinyphp" },
+                        "2": { "name": "entity.name.type.attribute.tinyphp" },
+                        "3": { "name": "punctuation.definition.string.begin.php" },
+                        "4": { "name": "string.quoted.double.php" },
+                        "5": { "name": "punctuation.definition.string.end.php" }
                     }
                 },
                 {
@@ -393,6 +429,11 @@
                 {
                     "name": "constant.language.php",
                     "match": "\\b(__LINE__|__FILE__|__DIR__|__CLASS__|__METHOD__|__FUNCTION__|__NAMESPACE__|DIRECTORY_SEPARATOR)\\b"
+                },
+                {
+                    "comment": "Extension constants (Filter/Pcre/Zlib/Zip/Stream/OpenSSL/Calendar/Exif/Fileinfo/Iconv/Seek)",
+                    "name": "support.constant.extension.tinyphp",
+                    "match": "\\b(FILTER_(?:VALIDATE|SANITIZE|FLAG)_[A-Z_]+|PREG_(?:PATTERN_ORDER|SET_ORDER|SPLIT_NO_EMPTY|SPLIT_DELIM_CAPTURE|GREP_INVERT|NO_ERROR|INTERNAL_ERROR|BACKTRACK_LIMIT_ERROR|RECURSION_LIMIT_ERROR)|ZLIB_(?:ENCODING_[A-Z]+|NO_COMPRESSION|BEST_SPEED|BEST_COMPRESSION|DEFAULT_COMPRESSION|NO_FLUSH|PARTIAL_FLUSH|SYNC_FLUSH|FULL_FLUSH|FINISH|BLOCK|FILTERED|HUFFMAN_ONLY|RLE|FIXED|DEFAULT_STRATEGY|OK|STREAM_END|NEED_DICT|ERRNO|STREAM_ERROR|DATA_ERROR|MEM_ERROR|BUF_ERROR|VERSION_ERROR|VERSION|VERNUM)|FORCE_(?:GZIP|DEFLATE)|ZIP_(?:CREATE|EXCL|CHECKCONS|TRUNCATE|RDONLY|FL_[A-Z]+|CM_[A-Z]+)|STREAM_(?:SOCK_[A-Z]+|PF_[A-Z0-9]+|IPPROTO_[A-Z]+|CRYPTO_[A-Z_]+)|CAL_[A-Z_]+|IMAGETYPE_[A-Z_]+|EXIF_TYPE_[A-Z]+|FILEINFO_[A-Z_]+|ICONV_(?:IMPL|VERSION)|SEEK_(?:SET|CUR|END))\\b"
                 }
             ]
         },
@@ -652,7 +693,7 @@
                 },
                 {
                     "name": "support.function.builtin.tinyphp",
-                    "match": "\\b(var_dump|print_r|count|isset|empty|unset|error|exit|die|time|date|sleep|usleep|hrtime|microtime|mktime|strtotime|uniqid|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable|is_resource|is_numeric|gettype|getenv|putenv|intval|floatval|strval|boolval|abs|round|ceil|floor|sqrt|pow|pi|fmod|deg2rad|rad2deg|intdiv|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|log10|is_finite|is_infinite|is_nan|rand|mt_rand|random_int|random_bytes)\\b"
+                    "match": "\\b(var_dump|print_r|count|isset|empty|unset|error|exit|die|time|date|sleep|usleep|hrtime|microtime|mktime|strtotime|uniqid|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable|is_resource|is_numeric|gettype|getenv|putenv|intval|floatval|strval|boolval|abs|round|ceil|floor|sqrt|pow|pi|fmod|deg2rad|rad2deg|intdiv|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|log10|is_finite|is_infinite|is_nan|rand|mt_rand|random_int|random_bytes|preg_match|preg_match_all|preg_replace|preg_split|preg_grep|preg_quote|preg_last_error|preg_last_error_msg|iconv|iconv_strlen|iconv_strpos|iconv_substr|iconv_get_encoding|iconv_set_encoding|iconv_mime_encode|iconv_mime_decode|filter_var|filter_list|filter_id|password_hash|password_verify|pcntl_fork|pcntl_wait|pcntl_waitpid|pcntl_exec|pcntl_alarm|pcntl_get_last_error|pcntl_strerror|posix_getpid|posix_getppid|posix_getuid|posix_geteuid|posix_getgid|posix_getegid|posix_getcwd|posix_isatty|posix_kill|posix_strerror|posix_get_last_error|posix_ttyname|posix_uname|posix_times|exif_imagetype|exif_read_data|exif_thumbnail|exif_tagname|exif_make_test_jpeg|exif_make_test_jpeg_ex|exif_make_test_tiff|exif_make_test_header|gregoriantojd|jdtogregorian|juliantojd|jdtojulian|jewishtojd|jdtojewish|jdtojewish_str|jewish_month_name|frenchtojd|jdtofrench|cal_days_in_month|cal_from_jd|cal_to_jd|cal_info|easter_date|easter_days|finfo_open|finfo_file|finfo_buffer|finfo_close|finfo_set_flags|mime_content_type|gzcompress|gzuncompress|gzencode|gzdecode|gzdeflate|gzinflate|zlib_encode|zlib_decode|gzopen|gzclose|gzread|gzwrite|gzputs|gzeof|gzgets|gzgetc|gzrewind|gzseek|gztell|gzpassthru|gzflush|gzfile|readgzfile|deflate_init|deflate_add|inflate_init|inflate_add|inflate_get_status|inflate_get_read_len|zip_open|zip_close|zip_num_files|zip_get_error_string|zip_locate|zip_read|zip_stat|zip_entry_name|zip_entry_filesize|zip_entry_compressedsize|zip_entry_compressionmethod|zip_entry_open|zip_entry_read|zip_entry_close|zip_add_file|zip_add_dir|zip_delete|zip_rename|stream_close|stream_last_error|stream_strerror|stream_set_blocking|stream_set_read_buffer|stream_set_write_buffer|stream_set_timeout|stream_isatty|stream_select|stream_get_contents|stream_get_line|stream_get_meta_data|stream_socket_server|stream_socket_accept|stream_socket_client|stream_socket_recvfrom|stream_socket_sendto|stream_socket_get_name|stream_socket_shutdown|stream_socket_enable_crypto|stream_socket_pair|openssl_ctx_new|openssl_ctx_free|openssl_ctx_use_certificate_file|openssl_ctx_use_private_key_file|openssl_ctx_set_verify|openssl_ctx_set_options|openssl_ssl_new|openssl_ssl_free|openssl_ssl_set_fd|openssl_ssl_connect|openssl_ssl_accept|openssl_ssl_read|openssl_ssl_write|openssl_ssl_shutdown|openssl_ssl_get_cipher_name|openssl_ssl_get_version|openssl_error_string|openssl_encrypt|openssl_decrypt|openssl_random_pseudo_bytes|openssl_digest|strtr2)\\b"
                 },
                 {
                     "comment": "TinyPHP built-in classes: Generator / Thread / Mutex / etc.",

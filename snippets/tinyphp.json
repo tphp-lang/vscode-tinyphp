@@ -464,6 +464,39 @@
             "});"
         ],
         "description": "Create a new Thread (tinycthread wrapper, Thread-Local runtime)"
+    },
+    "Conditional #if": {
+        "prefix": "#if",
+        "body": [
+            "#if ${1:Windows}",
+            "\t${0:// 条件代码}",
+            "#endif"
+        ],
+        "description": "条件编译块 #if ... #endif (GRAMMAR.md §11.1)"
+    },
+    "Conditional #if-#else": {
+        "prefix": "#ifelse",
+        "body": [
+            "#if ${1:Windows}",
+            "\t${2:// Windows 实现}",
+            "#else",
+            "\t${0:// 其他平台}",
+            "#endif"
+        ],
+        "description": "条件编译块 #if ... #else ... #endif"
+    },
+    "Conditional #if-#elseif-#else": {
+        "prefix": "#ifelif",
+        "body": [
+            "#if ${1:Windows}",
+            "\t${2:// Windows}",
+            "#elseif ${3:Linux}",
+            "\t${4:// Linux}",
+            "#else",
+            "\t${0:// 其他}",
+            "#endif"
+        ],
+        "description": "条件编译块 #if ... #elseif ... #else ... #endif"
     }
 }
 

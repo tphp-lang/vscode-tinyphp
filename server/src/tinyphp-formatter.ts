@@ -36,6 +36,10 @@ function formatText(text: string, options: FormatOptions): string {
     const lines = text.split(/\r?\n/);
     const result: string[] = [];
     let indentLevel = 0;
+    // switch/case 缩进追踪
+    let switchBraceDepth = -1; // 当前 switch 的 { 所在缩进层级，-1 表示不在 switch 中
+    let inCaseBody = false;    // 是否处于 case/default 标签后的语句体中
+    let switchPending = false;  // 是否刚看到 switch 关键字，等待 {
 
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i];
@@ -58,6 +62,12 @@ function formatText(text: string, options: FormatOptions): string {
         const closesAtStart = (trimmed.match(/^\}+/) || [''])[0].length;
         indentLevel = Math.max(0, indentLevel - closesAtStart);
 
+        // 检查是否关闭了 switch（indentLevel 已减去 closesAtStart，若 <= switchBraceDepth 则 switch 已关闭）
+        if (closesAtStart > 0 && switchBraceDepth >= 0 && indentLevel <= switchBraceDepth) {
+            switchBraceDepth = -1;
+            inCaseBody = false;
+        }
+
         // 1. 分离行内注释（// ...），但跳过字符串内的 //
         const { code: codeNoComment, comment } = splitLineComment(trimmed);
 
@@ -78,12 +88,39 @@ function formatText(text: string, options: FormatOptions): string {
             content = code.length > 0 ? code + ' ' + comment : comment;
         }
 
-        result.push(tab.repeat(indentLevel) + content);
+        // switch/case 缩进处理
+        //   case/default 标签本身不加额外缩进（与 switch 体同级）
+        //   case 体中的语句（break/continue/赋值/调用等）额外缩进一级
+        const isCaseLabel = /^case\b/.test(code) || /^default\s*:/.test(code);
+        const isCloseBraceLine = /^\}/.test(code);
+        // 检测 switch 关键字（标记下一个 { 为 switch 体）
+        if (/\bswitch\b/.test(code) && !isCloseBraceLine) {
+            switchPending = true;
+        }
+        let extraIndent = 0;
+        if (inCaseBody && !isCaseLabel) {
+            extraIndent = 1;
+        }
+
+        result.push(tab.repeat(indentLevel + extraIndent) + content);
+
+        // case/default 标签后续行进入 case 体
+        if (isCaseLabel && switchBraceDepth >= 0) {
+            inCaseBody = true;
+        }
 
         // 6. 更新缩进（基于受保护代码的大括号计数，避免字符串内 {} 干扰）
+        //    注意：行首的 } 已在 closesAtStart 中减过缩进，这里不能重复计算
         const opens = (protected_.match(/\{/g) || []).length;
         const closes = (protected_.match(/\}/g) || []).length;
-        indentLevel = Math.max(0, indentLevel + opens - closes);
+        // 如果本行打开了 { 且 switchPending，标记为 switch 体
+        if (opens > 0 && switchPending) {
+            switchBraceDepth = indentLevel; // 当前缩进层级（尚未加 opens）
+            switchPending = false;
+        } else if (opens > 0) {
+            switchPending = false;
+        }
+        indentLevel = Math.max(0, indentLevel + opens - (closes - closesAtStart));
     }
 
     return result.join('\n');
@@ -110,14 +147,15 @@ function splitLineComment(line: string): { code: string, comment: string } {
     return { code: line, comment: '' };
 }
 
-// 保护字符串字面量（双引号、单引号），用 \x00index\x00 占位符替换
+// 保护字符串字面量（双引号、单引号）和 PHP 标签，用 \x00index\x00 占位符替换
+// 注意：单双引号必须在一次遍历中匹配，否则双引号正则会误匹配单引号字符串内的 "
 function protectLiterals(code: string, tokens: string[]): string {
     return code
-        .replace(/"(?:[^"\\]|\\.)*"/g, (m) => {
+        .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, (m) => {
             tokens.push(m);
             return `\x00${tokens.length - 1}\x00`;
         })
-        .replace(/'(?:[^'\\]|\\.)*'/g, (m) => {
+        .replace(/<\?(?:php|=)|\?>/g, (m) => {
             tokens.push(m);
             return `\x00${tokens.length - 1}\x00`;
         });
@@ -150,7 +188,7 @@ function applySpacingRules(code: string): string {
     // ---- 阶段 1：控制关键字与大括号 ----
 
     // 1.1 控制关键字后加空格：if( → if (
-    code = code.replace(/\b(if|elseif|for|foreach|while|switch|catch|match)\s*\(/g, '$1 (');
+    code = code.replace(/\b(if|elseif|for|foreach|while|switch|catch)\s*\(/g, '$1 (');
 
     // 1.2 ) { 之间保证空格
     code = code.replace(/\)\s*\{/g, ') {');
@@ -184,13 +222,15 @@ function applySpacingRules(code: string): string {
     // ---- 阶段 3：二元算术/位/比较操作符（单字符） ----
     // 注意：必须在一元上下文不加空格
 
-    // 3.1 + 二元加：前面是 ) 数字 变量 ]，后面是非 =（避免 +=）
+    // 3.1 + 二元加：前面是 ) 数字 变量 ]，后面是非 =（避免 +=）和非 +（避免 ++）
     //     一元 + 不加空格（前面是 ( 或 , 或操作符或行首）
-    code = code.replace(/([\)\$\w\]])\s*\+\s*(?!=)/g, '$1 + ');
-    // 3.2 - 二元减：同上（避免 -= 和一元 -）
-    code = code.replace(/([\)\$\w\]])\s*-\s*(?!=)/g, '$1 - ');
-    // 3.3 * 乘：前面非 (（避免函数指针 *）后面非 =（避免 *=）
-    code = code.replace(/([\)\$\w\]])\s*\*\s*(?!=)/g, '$1 * ');
+    code = code.replace(/([\)\$\w\]])\s*\+(?!\+)\s*(?!=)/g, '$1 + ');
+    // 3.2 - 二元减：同上（避免 -= 和一元 -），且避免 -> 和 --
+    code = code.replace(/([\)\$\w\]])\s*-(?![->])\s*(?!=)/g, '$1 - ');
+    // 3.3 ** 幂运算（必须在 * 乘法之前处理，否则会被拆成 * *）
+    code = code.replace(/\s*\*\*\s*(?!=)/g, ' ** ');
+    // 3.3.1 * 乘：前面非 (（避免函数指针 *）后面非 =（避免 *=）和非 *（避免 **）
+    code = code.replace(/([\)\$\w\]])\s*\*(?!\*)\s*(?!=)/g, '$1 * ');
     // 3.4 / 除：前面非 / （避免注释）后面非 =（避免 /=）
     code = code.replace(/([\)\$\w\]])\s*\/\s*(?!=)/g, '$1 / ');
     // 3.5 % 取模：后面非 =（避免 %=）
@@ -198,13 +238,17 @@ function applySpacingRules(code: string): string {
 
     // 3.6 < 比较：前面非 < （避免 <<）后面非 = （避免 <=, <=>）和 < （避免 <<）
     code = code.replace(/([^\s<=>!])\s*<\s*([^<=>])/g, '$1 < $2');
-    // 3.7 > 比较：前面非 > （避免 >>）后面非 = （避免 >=）
-    code = code.replace(/([^\s<=>!])\s*>\s*([^=>])/g, '$1 > $2');
+    // 3.7 > 比较：前面非 > （避免 >>）非 - （避免 ->）后面非 = （避免 >=）
+    code = code.replace(/([^\s<=>!-])\s*>\s*([^=>])/g, '$1 > $2');
 
-    // 3.8 & 按位与（非引用，非 &&）：前面是 ) 数字 变量 ]，后面非 & （避免 &&）
-    //     注意：引用 &$var 不加空格 — 用前导边界排除
-    code = code.replace(/([\)\$\w\]])\s*&\s*(?=&|$|[^\s&])/g, '$1 & ');
-    code = code.replace(/([\)\$\w\]])\s*&\s*(?![&=])/g, '$1 & ');
+    // 3.8 & 引用 vs 按位与
+    //   3.8.1 引用 &$var 紧贴：& 后跟 $ 且非位与上下文（前面非 $var/)/]）
+    //         string & $s → string &$s；foo(&$s) → foo(&$s)
+    //         注意：(?<!&) 排除 && 的第二个 &，避免误匹配
+    code = code.replace(/(?<!&)(?<!\$\w+\s*)(?<![\)\]]\s*)&\s+\$/g, '&$');
+    //   3.8.2 按位与 & 加空格：前面是 $var 或 ) 或 ]（操作数结尾）
+    //         $a & $b → $a & $b；foo() & $x → foo() & $x
+    code = code.replace(/(?<=\$\w+|[\)\]])\s*&\s*(?![&=])/g, ' & ');
     // 3.9 | 按位或（非 ||，非 |>）：前面非 |，后面非 | 和 >
     code = code.replace(/([\)\$\w\]])\s*\|\s*(?![|>=])/g, '$1 | ');
     // 3.10 ^ 按位异或
@@ -258,11 +302,16 @@ function applySpacingRules(code: string): string {
         '$1 '
     );
 
+    // 9.2 关键字后确保空格：return/throw/echo/yield/print 后若直接跟值或 (，确保空格
+    //     return$x → return $x；return($x) → return ($x)；return; 不变
+    //     注意：\x00 用于匹配被保护的字符串占位符（字符串已在 protectLiterals 中替换）
+    code = code.replace(/\b(return|throw|echo|yield|print)\b\s*(?=[\$\w'"-(\x00])/g, '$1 ');
+
     // ---- 阶段 10：函数调用紧贴 ----
     // 10.1 `(` 前的多余空格（函数调用）：`foo (` → `foo(`
     //      但保留控制关键字后的空格（已在阶段 1 处理）
     code = code.replace(/\b([a-zA-Z_]\w*)\s+\(/g, (match, name) => {
-        if (['if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch', 'match', 'return', 'throw', 'new', 'echo', 'isset', 'empty', 'unset', 'list', 'exit', 'die', 'eval', 'assert', 'array'].includes(name)) {
+        if (['if', 'elseif', 'for', 'foreach', 'while', 'switch', 'catch', 'return', 'throw', 'new', 'echo', 'isset', 'empty', 'unset', 'list', 'exit', 'die', 'eval', 'assert', 'array'].includes(name)) {
             return match;
         }
         return name + '(';

@@ -1018,6 +1018,20 @@ connection.onCompletionResolve(
             if (doc) {
                 item.documentation = { kind: MarkupKind.Markdown, value: doc };
             }
+        } else if (item.data === 'constant') {
+            let doc = TinyPHP.getConstantDocumentation(item.label);
+            if (doc) {
+                item.documentation = { kind: MarkupKind.Markdown, value: doc };
+            }
+        } else if (item.data === 'class-method') {
+            // item.label 格式 "ClassName::method" 或 "ClassName->method"
+            const m = item.label.match(/^(.+?)(?:::|->)(.+)$/);
+            if (m) {
+                let doc = TinyPHP.getClassMethodDocumentation(m[1], m[2]);
+                if (doc) {
+                    item.documentation = { kind: MarkupKind.Markdown, value: doc };
+                }
+            }
         }
         return item;
     }
@@ -1092,6 +1106,17 @@ connection.onHover(
                 contents: {
                     kind: MarkupKind.Markdown,
                     value: cInteropDoc
+                }
+            };
+        }
+
+        // Check if it's an extension constant (FILTER_*, PREG_*, ZLIB_*, etc.)
+        let constDoc = TinyPHP.getConstantDocumentation(word);
+        if (constDoc) {
+            return {
+                contents: {
+                    kind: MarkupKind.Markdown,
+                    value: constDoc
                 }
             };
         }
@@ -2237,6 +2262,18 @@ function inferConstantType(name: string): string | null {
     if (name === 'true' || name === 'false') return 'bool';
     if (name === 'null') return 'mixed';
     if (name === 'STDIN' || name === 'STDOUT' || name === 'STDERR') return 'mixed';
+
+    // 扩展常量类型推导（基于 constantDocs 的 category 与命名约定）
+    const upper = name.toUpperCase();
+    if (upper === 'ZLIB_VERSION' || upper === 'ICONV_IMPL' || upper === 'ICONV_VERSION') {
+        return 'string';
+    }
+    if (upper.startsWith('FILTER_') || upper.startsWith('PREG_') || upper.startsWith('ZLIB_')
+        || upper.startsWith('ZIP_') || upper.startsWith('STREAM_') || upper.startsWith('CAL_')
+        || upper.startsWith('IMAGETYPE_') || upper.startsWith('EXIF_TYPE_') || upper.startsWith('FILEINFO_')
+        || upper === 'SEEK_SET' || upper === 'SEEK_CUR' || upper === 'SEEK_END') {
+        return 'int';
+    }
     return null;
 }
 
