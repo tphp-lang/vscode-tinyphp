@@ -6,6 +6,7 @@ lib/
 dist/
 .DS_Store
 Thumbs.db
+*.tmp
 
 # TypeScript 增量构建缓存
 *.tsbuildinfo

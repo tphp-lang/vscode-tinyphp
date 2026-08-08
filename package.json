@@ -2,7 +2,7 @@
     "name": "vscode-tinyphp",
     "displayName": "TinyPHP",
     "description": "TinyPHP language support for Visual Studio Code — syntax highlighting, diagnostics, autocomplete, and code navigation",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": "tinyphp",
     "repository": {
         "type": "git",
