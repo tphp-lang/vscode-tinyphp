@@ -44,16 +44,30 @@ VS Code IDE 插件，为 TinyPHP 语言提供全面的开发体验支持。
 git clone https://github.com/tphp-lang/vscode-tinyphp.git
 cd vscode-tinyphp
 
-# 安装依赖
+# 安装依赖（根目录 + 服务端）
 npm install
 cd server && npm install && cd ..
 
-# 编译
-npm run compile
+# 编译语言服务器（产出 server/out）
+npx tsc -b server/tsconfig.json
 
-# 打包为 .vsix
+# 打包为 .vsix（vsce 会自动执行 webpack 产出 lib/extension.js）
 npx vsce package
 ```
+
+> **⚠️ 如果 `npx` 被 Bun 接管**（运行 `where npx` 指向 `...\.bun\bin\npx.exe`），`npx vsce package` 会因 `vsce` 内部的 `tar` → `duplexify` → `stream-shift` 链在 Bun 运行时下不兼容而崩溃，报错形如 `TypeError: null is not an object (evaluating 'state.buffer[0].length')`。
+>
+> 此时请绕开 Bun 的 `npx`/`tsc`/`webpack` shim，改用 Node.js 直接调用：
+>
+> ```bash
+> # 编译语言服务器
+> node node_modules/typescript/bin/tsc -b server/tsconfig.json
+>
+> # 打包（用 npm 原生 exec，不经过 bun 的 npx shim）
+> npm exec -y --package @vscode/vsce -- vsce package
+> ```
+>
+> 或将 `@vscode/vsce` 加入 `devDependencies`，然后直接运行 `node node_modules/@vscode/vsce/vsce package`，彻底不碰 `npx`。
 
 ### 开发模式
 
