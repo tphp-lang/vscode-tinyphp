@@ -57,17 +57,20 @@ npx vsce package
 
 > **⚠️ 如果 `npx` 被 Bun 接管**（运行 `where npx` 指向 `...\.bun\bin\npx.exe`），`npx vsce package` 会因 `vsce` 内部的 `tar` → `duplexify` → `stream-shift` 链在 Bun 运行时下不兼容而崩溃，报错形如 `TypeError: null is not an object (evaluating 'state.buffer[0].length')`。
 >
-> 此时请绕开 Bun 的 `npx`/`tsc`/`webpack` shim，改用 Node.js 直接调用：
+> 推荐方案：本项目已将 `@vscode/vsce` 加入 `devDependencies`，直接用 Node.js 调用，彻底绕开 `npx`/Bun：
 >
 > ```bash
+> # 安装依赖（含 @vscode/vsce）
+> npm install
+>
 > # 编译语言服务器
 > node node_modules/typescript/bin/tsc -b server/tsconfig.json
 >
-> # 打包（用 npm 原生 exec，不经过 bun 的 npx shim）
-> npm exec -y --package @vscode/vsce -- vsce package
+> # 打包
+> node node_modules/@vscode/vsce/vsce package
 > ```
 >
-> 或将 `@vscode/vsce` 加入 `devDependencies`，然后直接运行 `node node_modules/@vscode/vsce/vsce package`，彻底不碰 `npx`。
+> 发布同理：`node node_modules/@vscode/vsce/vsce publish`
 
 ### 开发模式
 
