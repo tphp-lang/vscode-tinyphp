@@ -69,7 +69,7 @@ const keywordDocs: Record<string, KeywordDoc> = {
     'bool': { description: '布尔类型 (bool)', category: 'Type' },
     'void': { description: '无返回值', category: 'Type' },
     'never': { description: '永不返回 (exit/throw)', category: 'Type' },
-    'array': { description: '有序映射 (t_array*)。128槽复用池+1.5x增长', category: 'Type' },
+    'array': { description: '有序映射 (t_array*)。128槽复用池+1.5x增长。支持泛型 array<T>（T=int/string/float/bool/mixed/array<U>/类类型），紧凑存储优化，array<int> 比 array<mixed> 省 67% 内存', category: 'Type' },
     'mixed': { description: '动态类型 (t_var 标签联合体)。有运行时开销', category: 'Type' },
     'callable': { description: '可调用类型 (t_callback)。闭包/C函数指针', category: 'Type' },
     'null': { description: '空值', category: 'Constant' },
@@ -93,7 +93,17 @@ const keywordDocs: Record<string, KeywordDoc> = {
     'Resource': { description: '✅ 资源基类 (handle/type/ptr 字段,模拟 PHP zend_resource)', category: 'OOP' },
     'File': { description: '✅ 文件类 (extends Resource,替代 PHP fopen resource,RAII 自动 fclose)', category: 'OOP' },
     'Exception': { description: '✅ 异常基类。子类沿父链匹配,catch(Exception $e) 捕获所有', category: 'Exception' },
+    'stdClass': { description: '✅ 动态属性容器（基于 t_array 哈希索引，O(1) 属性查找）。支持字面量属性名读写、isset/unset、foreach 遍历、(object)/(array) 类型转换。仅支持字面量属性名（编译期已知），不支持 $obj->$var 动态属性名', category: 'OOP' },
+    'Channel': { description: '🔧 CSP 风格有界通道类（参考 vlang，环形缓冲区零 malloc）。方法: push/pop/tryPush/tryPop/close/isClosed/length/capacity。push 到已关闭通道抛 ChannelClosedException', category: 'Concurrency' },
+    'Future': { description: '🔧 一次性异步结果传递类。方法: create(静态)/resolve/reject/await/isReady/isRejected/then/catch + 静态 all/race。await reject 的 Future 抛 FutureRejectedException', category: 'Concurrency' },
+    'ChannelClosedException': { description: '🔧 push 到已关闭 Channel 时抛出', category: 'Exception' },
+    'FutureRejectedException': { description: '🔧 await 被 reject 的 Future 时抛出', category: 'Exception' },
+    'defer': { description: '🔧 Zig 风格作用域清理: defer EXPR; 或 defer { stmts }。函数退出时 LIFO 执行，编译期展开到 return/fall-through 路径，零运行时开销。异常路径（try-catch longjmp）不执行 defer', category: 'Control Flow' },
     'DIRECTORY_SEPARATOR': { description: '编译期替换为平台路径分隔符 (/ 或 \\)', category: 'Constant' },
+    '__FUNCTION__': { description: '编译期替换为当前函数名', category: 'Constant' },
+    '__EXT__': { description: '🔧 TinyPHP 路径常量：编译器 ext/ 目录。用于 #include 路径展开: #include __EXT__ . "/demo/src/demo.h"', category: 'Constant' },
+    '__INC__': { description: '🔧 TinyPHP 路径常量：编译器 include/ 目录。用于 #include 路径展开: #include __INC__ . "/common.h"', category: 'Constant' },
+    '__CMD__': { description: '🔧 TinyPHP 路径常量：执行 tphp 的工作目录。用于 #include 路径展开: #include __CMD__ . "/local_lib.h"', category: 'Constant' },
     'C': { description: '🔧 C 互操作命名空间: C->func() 调用 / C.Type 类型注解 / (C.Type) 强制转换', category: 'C Interop' },
     'AnnotationEntry': { description: '✅ 注解 entry 内置类（C 结构体，非用户类）。每个注解使用编译期收集为一个 `AnnotationEntry` 实例。\n\n**属性**: `$data: array`（位置参数数组）、`$type: string`（`method`/`static_method`/`class`/`function`）、`$name: string`（限定名如 `Ns\\Class->method`）\n\n**方法**: `call(...$args): mixed`（调用目标方法/静态方法/函数，class 目标报错）、`newInstance(...$args): object`（实例化目标类，非 class 目标报错）\n\n**访问**: 通过注解常量静态索引，如 `ROUTE[0]->call(...)`、`ROUTE[0]->name`。编译期零开销直接展开为静态指针或直接调用。**不支持动态索引** `ROUTE[$i]`（编译期无法确定目标）。', category: 'OOP' },
     'Export': { description: '🔧 动态库导出注解 `#[Export("c_function_name")]`。标记独立函数导出为 C 函数，配合 `-shared` 编译选项生成可被外部 C 代码调用的动态库（`.dll`/`.so`/`.dylib`）。\n\n**规则**: 仅可用于独立函数（`function`），用于方法报语法错误；参数为字符串字面量（合法 C 标识符，全局唯一）；非 `-shared` 模式下静默忽略。\n\n**类型约束**: 参数/返回值允许 `int`/`float`/`bool`/`string`/`void`/`C.Type`，**禁止 `array`**。`string` 直接暴露 `t_string*`。\n\n与 `#[Attribute]` 注解系统**独立**：不经过声明，不收集到注解常量数组，仅控制 C 符号导出。可与用户注解共存于同一函数。', category: 'C Interop' },
@@ -108,6 +118,7 @@ interface FuncDoc {
     signature: string;
     params: { name: string; description: string }[];
     returnType: string;
+    throwsException?: boolean;
 }
 
 const functionDocs: Record<string, FuncDoc> = {
@@ -137,7 +148,7 @@ const functionDocs: Record<string, FuncDoc> = {
         returnType: 'never'
     },
     'error': {
-        description: '触发错误并终止程序',
+        description: '触发异常（等价于 throw new Exception($msg) 的简写）。可被 try-catch 捕获；未被 catch 时回退到 exit(1) + 输出 Fatal error 信息。函数体包含 error() 调用时，返回类型必须声明 |Exception',
         signature: 'error(string $message): never',
         params: [{ name: '$message', description: '错误消息' }],
         returnType: 'never'
@@ -189,6 +200,12 @@ const functionDocs: Record<string, FuncDoc> = {
     'is_callable': {
         description: '检查是否为 callable',
         signature: 'is_callable(mixed $value): bool',
+        params: [{ name: '$value', description: '要检查的值' }],
+        returnType: 'bool'
+    },
+    'is_resource': {
+        description: '检查是否为 resource。编译期 tphp_class_ 类型 → true；运行时 tp_obj_is_a 检查继承链',
+        signature: 'is_resource(mixed $value): bool',
         params: [{ name: '$value', description: '要检查的值' }],
         returnType: 'bool'
     },
@@ -279,6 +296,33 @@ const functionDocs: Record<string, FuncDoc> = {
     'strpos': {
         description: '查找子串首次出现位置，未找到返回 -1',
         signature: 'strpos(string $haystack, string $needle): int',
+        params: [
+            { name: '$haystack', description: '被搜索字符串' },
+            { name: '$needle', description: '要搜索的子串' }
+        ],
+        returnType: 'int'
+    },
+    'strrpos': {
+        description: '从右往左查找子串首次出现位置，未找到返回 -1',
+        signature: 'strrpos(string $haystack, string $needle): int',
+        params: [
+            { name: '$haystack', description: '被搜索字符串' },
+            { name: '$needle', description: '要搜索的子串' }
+        ],
+        returnType: 'int'
+    },
+    'stripos': {
+        description: '大小写不敏感查找子串首次出现位置（仅 ASCII A-Z/a-z），未找到返回 -1',
+        signature: 'stripos(string $haystack, string $needle): int',
+        params: [
+            { name: '$haystack', description: '被搜索字符串' },
+            { name: '$needle', description: '要搜索的子串' }
+        ],
+        returnType: 'int'
+    },
+    'strripos': {
+        description: '大小写不敏感从右往左查找子串位置（仅 ASCII A-Z/a-z），未找到返回 -1',
+        signature: 'strripos(string $haystack, string $needle): int',
         params: [
             { name: '$haystack', description: '被搜索字符串' },
             { name: '$needle', description: '要搜索的子串' }
@@ -842,6 +886,34 @@ const functionDocs: Record<string, FuncDoc> = {
         params: [{ name: '$array', description: '目标数组' }],
         returnType: 'bool'
     },
+    'array_map': {
+        description: '用回调函数处理数组的每个元素，返回新数组。编译期内联展开为 for 循环，键不保留',
+        signature: 'array_map(callable $callback, array $array): array',
+        params: [
+            { name: '$callback', description: '回调函数 fn(mixed $v): mixed' },
+            { name: '$array', description: '目标数组' }
+        ],
+        returnType: 'array'
+    },
+    'array_filter': {
+        description: '用回调函数过滤数组元素，保留返回 true 的元素。编译期内联展开，键不保留',
+        signature: 'array_filter(array $array, callable $callback): array',
+        params: [
+            { name: '$array', description: '目标数组' },
+            { name: '$callback', description: '过滤回调 fn(mixed $v): bool' }
+        ],
+        returnType: 'array'
+    },
+    'array_reduce': {
+        description: '用回调函数迭代地将数组简化为单一值。编译期内联累加器循环',
+        signature: 'array_reduce(array $array, callable $callback, mixed $initial): mixed',
+        params: [
+            { name: '$array', description: '目标数组' },
+            { name: '$callback', description: '累加回调 fn(mixed $carry, mixed $item): mixed' },
+            { name: '$initial', description: '初始值（必填）' }
+        ],
+        returnType: 'mixed'
+    },
 
     // ---- 数学函数 (std/math.h + tphp_math.h) ----
     'abs': {
@@ -908,7 +980,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$dividend', description: '被除数' },
             { name: '$divisor', description: '除数' }
         ],
-        returnType: 'int'
+        returnType: 'int',
+        throwsException: true
     },
     'deg2rad': {
         description: '角度转弧度',
@@ -957,7 +1030,7 @@ const functionDocs: Record<string, FuncDoc> = {
     // ---- 随机数 (rand.h) ----
     'rand': { description: '生成随机整数（CSPRNG）', signature: 'rand(int $min = 0, int $max = PHP_INT_MAX): int', params: [{ name: '$min', description: '最小值（可选）' }, { name: '$max', description: '最大值（可选）' }], returnType: 'int' },
     'mt_rand': { description: '生成随机整数（代理到 random_int）', signature: 'mt_rand(int $min = 0, int $max = PHP_INT_MAX): int', params: [{ name: '$min', description: '最小值（可选）' }, { name: '$max', description: '最大值（可选）' }], returnType: 'int' },
-    'random_int': { description: '密码学安全随机整数', signature: 'random_int(int $min, int $max): int', params: [{ name: '$min', description: '最小值' }, { name: '$max', description: '最大值' }], returnType: 'int' },
+    'random_int': { description: '密码学安全随机整数', signature: 'random_int(int $min, int $max): int', params: [{ name: '$min', description: '最小值' }, { name: '$max', description: '最大值' }], returnType: 'int', throwsException: true },
     'random_bytes': { description: '密码学安全随机字节', signature: 'random_bytes(int $length): string', params: [{ name: '$length', description: '字节数' }], returnType: 'string' },
 
     // ---- 字符检测 (ctype, std/ctrl.h) ----
@@ -997,7 +1070,7 @@ const functionDocs: Record<string, FuncDoc> = {
     'uniqid': { description: '生成唯一 ID', signature: 'uniqid(string $prefix = ""): string', params: [{ name: '$prefix', description: '前缀（可选）' }], returnType: 'string' },
 
     // ---- 文件 I/O (os/file.h) ----
-    'file_get_contents': { description: '读取文件全部内容为字符串', signature: 'file_get_contents(string $filename): string', params: [{ name: '$filename', description: '文件路径' }], returnType: 'string' },
+    'file_get_contents': { description: '读取文件全部内容为字符串', signature: 'file_get_contents(string $filename): string', params: [{ name: '$filename', description: '文件路径' }], returnType: 'string', throwsException: true },
     'file_put_contents': { description: '将数据写入文件（覆盖）', signature: 'file_put_contents(string $filename, string $data): int', params: [{ name: '$filename', description: '文件路径' }, { name: '$data', description: '要写入的数据' }], returnType: 'int' },
 
     // ---- UTF-8 (std/utf8.h) ----
@@ -1107,7 +1180,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$to_encoding', description: '目标编码' },
             { name: '$string', description: '要转换的字符串' }
         ],
-        returnType: 'string'
+        returnType: 'string',
+        throwsException: true
     },
     'iconv_strlen': {
         description: '返回指定编码下字符串的字符数',
@@ -1122,7 +1196,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$haystack', description: '目标字符串' },
             { name: '$needle', description: '查找子串' }
         ],
-        returnType: 'int'
+        returnType: 'int',
+        throwsException: true
     },
     'iconv_substr': {
         description: '截取子串（按字符计数）',
@@ -1147,7 +1222,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$type', description: '编码类型' },
             { name: '$encoding', description: '编码名称' }
         ],
-        returnType: 'bool'
+        returnType: 'bool',
+        throwsException: true
     },
     'iconv_mime_encode': {
         description: '编码 MIME 头字段',
@@ -1215,7 +1291,8 @@ const functionDocs: Record<string, FuncDoc> = {
         description: '创建子进程。父进程返回子进程 PID，子进程返回 0',
         signature: 'pcntl_fork(): int',
         params: [],
-        returnType: 'int'
+        returnType: 'int',
+        throwsException: true
     },
     'pcntl_waitpid': {
         description: '等待指定子进程状态变化',
@@ -1279,13 +1356,15 @@ const functionDocs: Record<string, FuncDoc> = {
         description: '检测图像类型，返回 IMAGETYPE_* 常量',
         signature: 'exif_imagetype(string $filename): int',
         params: [{ name: '$filename', description: '图像文件路径' }],
-        returnType: 'int'
+        returnType: 'int',
+        throwsException: true
     },
     'exif_read_data': {
         description: '从图像文件读取 EXIF 头信息，返回关联数组',
         signature: 'exif_read_data(string $filename): array',
         params: [{ name: '$filename', description: '图像文件路径' }],
-        returnType: 'array'
+        returnType: 'array',
+        throwsException: true
     },
     'exif_thumbnail': {
         description: '读取嵌入的缩略图数据',
@@ -1305,22 +1384,22 @@ const functionDocs: Record<string, FuncDoc> = {
     'exif_make_test_header': { description: '生成测试用图像头（测试辅助）', signature: 'exif_make_test_header(): string', params: [], returnType: 'string' },
 
     // ---- calendar 日历转换 (纯 tphp 实现, 基于 JD) ----
-    'gregoriantojd': { description: '公历转儒略日', signature: 'gregoriantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'jdtogregorian': { description: '儒略日转公历，返回 ["month","day","year"]', signature: 'jdtogregorian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
-    'juliantojd': { description: '儒略历转儒略日', signature: 'juliantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'jdtojulian': { description: '儒略日转儒略历，返回 ["month","day","year"]', signature: 'jdtojulian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
-    'jewishtojd': { description: '犹太历转儒略日', signature: 'jewishtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'jdtojewish': { description: '儒略日转犹太历，返回 ["month","day","year"]', signature: 'jdtojewish(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
-    'jdtojewish_str': { description: '儒略日转犹太历字符串（含希伯来月份名）', signature: 'jdtojewish_str(int $jd): string', params: [{ name: '$jd', description: '儒略日' }], returnType: 'string' },
+    'gregoriantojd': { description: '公历转儒略日', signature: 'gregoriantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'jdtogregorian': { description: '儒略日转公历，返回 ["month","day","year"]', signature: 'jdtogregorian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array', throwsException: true },
+    'juliantojd': { description: '儒略历转儒略日', signature: 'juliantojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'jdtojulian': { description: '儒略日转儒略历，返回 ["month","day","year"]', signature: 'jdtojulian(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array', throwsException: true },
+    'jewishtojd': { description: '犹太历转儒略日', signature: 'jewishtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'jdtojewish': { description: '儒略日转犹太历，返回 ["month","day","year"]', signature: 'jdtojewish(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array', throwsException: true },
+    'jdtojewish_str': { description: '儒略日转犹太历字符串（含希伯来月份名）', signature: 'jdtojewish_str(int $jd): string', params: [{ name: '$jd', description: '儒略日' }], returnType: 'string', throwsException: true },
     'jewish_month_name': { description: '返回犹太历月份名', signature: 'jewish_month_name(int $month): string', params: [{ name: '$month', description: '月份编号' }], returnType: 'string' },
-    'frenchtojd': { description: '法国共和历转儒略日', signature: 'frenchtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'jdtofrench': { description: '儒略日转法国共和历', signature: 'jdtofrench(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array' },
-    'cal_days_in_month': { description: '返回指定日历某月天数', signature: 'cal_days_in_month(int $calendar, int $month, int $year): int', params: [{ name: '$calendar', description: '日历类型（CAL_*）' }, { name: '$month', description: '月' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'cal_from_jd': { description: '儒略日转指定日历的日期信息数组', signature: 'cal_from_jd(int $jd, int $calendar): array', params: [{ name: '$jd', description: '儒略日' }, { name: '$calendar', description: '日历类型' }], returnType: 'array' },
-    'cal_to_jd': { description: '指定日历日期转儒略日', signature: 'cal_to_jd(int $calendar, int $month, int $day, int $year): int', params: [{ name: '$calendar', description: '日历类型' }, { name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int' },
-    'cal_info': { description: '返回指定日历的信息数组', signature: 'cal_info(int $calendar): array', params: [{ name: '$calendar', description: '日历类型' }], returnType: 'array' },
-    'easter_date': { description: '返回指定年份复活节的 Unix 时间戳', signature: 'easter_date(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int' },
-    'easter_days': { description: '返回当年春分后到复活节的天数', signature: 'easter_days(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int' },
+    'frenchtojd': { description: '法国共和历转儒略日', signature: 'frenchtojd(int $month, int $day, int $year): int', params: [{ name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'jdtofrench': { description: '儒略日转法国共和历', signature: 'jdtofrench(int $jd): array', params: [{ name: '$jd', description: '儒略日' }], returnType: 'array', throwsException: true },
+    'cal_days_in_month': { description: '返回指定日历某月天数', signature: 'cal_days_in_month(int $calendar, int $month, int $year): int', params: [{ name: '$calendar', description: '日历类型（CAL_*）' }, { name: '$month', description: '月' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'cal_from_jd': { description: '儒略日转指定日历的日期信息数组', signature: 'cal_from_jd(int $jd, int $calendar): array', params: [{ name: '$jd', description: '儒略日' }, { name: '$calendar', description: '日历类型' }], returnType: 'array', throwsException: true },
+    'cal_to_jd': { description: '指定日历日期转儒略日', signature: 'cal_to_jd(int $calendar, int $month, int $day, int $year): int', params: [{ name: '$calendar', description: '日历类型' }, { name: '$month', description: '月' }, { name: '$day', description: '日' }, { name: '$year', description: '年' }], returnType: 'int', throwsException: true },
+    'cal_info': { description: '返回指定日历的信息数组', signature: 'cal_info(int $calendar): array', params: [{ name: '$calendar', description: '日历类型' }], returnType: 'array', throwsException: true },
+    'easter_date': { description: '返回指定年份复活节的 Unix 时间戳', signature: 'easter_date(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int', throwsException: true },
+    'easter_days': { description: '返回当年春分后到复活节的天数', signature: 'easter_days(int $year): int', params: [{ name: '$year', description: '年份' }], returnType: 'int', throwsException: true },
 
     // ---- fileinfo MIME 检测 ----
     'finfo_open': {
@@ -1330,7 +1409,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$flags', description: '标志位（FILEINFO_*）' },
             { name: '$magic_file', description: '魔数文件路径（可空）' }
         ],
-        returnType: 'Resource'
+        returnType: 'Resource',
+        throwsException: true
     },
     'finfo_file': {
         description: '返回文件 MIME 信息',
@@ -1340,7 +1420,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$filename', description: '文件路径' },
             { name: '$flags', description: '标志位' }
         ],
-        returnType: 'string'
+        returnType: 'string',
+        throwsException: true
     },
     'finfo_buffer': {
         description: '返回字符串内容的 MIME 信息',
@@ -1350,7 +1431,8 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$data', description: '要检测的内容' },
             { name: '$flags', description: '标志位' }
         ],
-        returnType: 'string'
+        returnType: 'string',
+        throwsException: true
     },
     'finfo_close': {
         description: '关闭 fileinfo 资源',
@@ -1365,13 +1447,15 @@ const functionDocs: Record<string, FuncDoc> = {
             { name: '$finfo', description: 'finfo 资源' },
             { name: '$flags', description: '标志位' }
         ],
-        returnType: 'bool'
+        returnType: 'bool',
+        throwsException: true
     },
     'mime_content_type': {
         description: '检测文件 MIME 类型',
         signature: 'mime_content_type(string $filename): string',
         params: [{ name: '$filename', description: '文件路径' }],
-        returnType: 'string'
+        returnType: 'string',
+        throwsException: true
     },
 
     // ---- zlib 压缩/解压 (内置 zlib 1.3.2) ----
@@ -1434,18 +1518,18 @@ const functionDocs: Record<string, FuncDoc> = {
     'stream_set_write_buffer': { description: '设置写缓冲区大小', signature: 'stream_set_write_buffer(int $fd, int $buffer): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$buffer', description: '缓冲区大小' }], returnType: 'int' },
     'stream_set_timeout': { description: '设置读写超时', signature: 'stream_set_timeout(int $fd, int $seconds, int $microseconds): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$seconds', description: '秒' }, { name: '$microseconds', description: '微秒' }], returnType: 'bool' },
     'stream_isatty': { description: '检查是否为终端', signature: 'stream_isatty(int $fd): bool', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'bool' },
-    'stream_select': { description: '多路复用等待（poll 风格）', signature: 'stream_select(array $read, array $write, array $except, int $tv_sec, int $tv_usec): int', params: [{ name: '$read', description: '可读 fd 数组' }, { name: '$write', description: '可写 fd 数组' }, { name: '$except', description: '异常 fd 数组' }, { name: '$tv_sec', description: '秒' }, { name: '$tv_usec', description: '微秒' }], returnType: 'int' },
+    'stream_select': { description: '多路复用等待（poll 风格）', signature: 'stream_select(array $read, array $write, array $except, int $tv_sec, int $tv_usec): int', params: [{ name: '$read', description: '可读 fd 数组' }, { name: '$write', description: '可写 fd 数组' }, { name: '$except', description: '异常 fd 数组' }, { name: '$tv_sec', description: '秒' }, { name: '$tv_usec', description: '微秒' }], returnType: 'int', throwsException: true },
     'stream_get_contents': { description: '读取全部内容', signature: 'stream_get_contents(int $fd, int $length, int $offset): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$length', description: '长度（-1=全部）' }, { name: '$offset', description: '偏移（-1=当前位置）' }], returnType: 'string' },
     'stream_get_line': { description: '读取一行（到指定结束符）', signature: 'stream_get_line(int $fd, int $length, string $ending): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$length', description: '最大长度' }, { name: '$ending', description: '结束符' }], returnType: 'string' },
     'stream_get_meta_data': { description: '返回流元数据数组', signature: 'stream_get_meta_data(int $fd): array', params: [{ name: '$fd', description: '文件描述符' }], returnType: 'array' },
-    'stream_socket_server': { description: '创建服务端 socket', signature: 'stream_socket_server(int $domain, int $type, int $protocol): int', params: [{ name: '$domain', description: '协议族（STREAM_PF_*）' }, { name: '$type', description: 'socket 类型（STREAM_SOCK_*）' }, { name: '$protocol', description: '协议（STREAM_IPPROTO_*）' }], returnType: 'int' },
-    'stream_socket_accept': { description: '接受客户端连接', signature: 'stream_socket_accept(int $server_fd): int', params: [{ name: '$server_fd', description: '服务端 fd' }], returnType: 'int' },
+    'stream_socket_server': { description: '创建服务端 socket', signature: 'stream_socket_server(int $domain, int $type, int $protocol): int', params: [{ name: '$domain', description: '协议族（STREAM_PF_*）' }, { name: '$type', description: 'socket 类型（STREAM_SOCK_*）' }, { name: '$protocol', description: '协议（STREAM_IPPROTO_*）' }], returnType: 'int', throwsException: true },
+    'stream_socket_accept': { description: '接受客户端连接', signature: 'stream_socket_accept(int $server_fd): int', params: [{ name: '$server_fd', description: '服务端 fd' }], returnType: 'int', throwsException: true },
     'stream_socket_client': { description: '创建客户端 socket 并连接', signature: 'stream_socket_client(int $domain, int $type, int $protocol, string $addr, int $port): int', params: [{ name: '$domain', description: '协议族' }, { name: '$type', description: 'socket 类型' }, { name: '$protocol', description: '协议' }, { name: '$addr', description: '地址' }, { name: '$port', description: '端口' }], returnType: 'int' },
-    'stream_socket_recvfrom': { description: '接收数据（UDP 或对端地址）', signature: 'stream_socket_recvfrom(int $fd, int $len, int $flags, string &$addr): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$len', description: '最大长度' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '对端地址（引用）' }], returnType: 'string' },
-    'stream_socket_sendto': { description: '发送数据到指定地址', signature: 'stream_socket_sendto(int $fd, string $data, int $flags, string $addr, int $port): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$data', description: '数据' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '目标地址' }, { name: '$port', description: '目标端口' }], returnType: 'int' },
-    'stream_socket_get_name': { description: '返回 socket 的本地或对端地址', signature: 'stream_socket_get_name(int $fd, bool $want_peer): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$want_peer', description: 'true=对端, false=本地' }], returnType: 'string' },
-    'stream_socket_shutdown': { description: '关闭 socket 的读/写方向', signature: 'stream_socket_shutdown(int $fd, int $how): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$how', description: '方向（STREAM_SHUT_*）' }], returnType: 'bool' },
-    'stream_socket_enable_crypto': { description: '启用/禁用 TLS（需 openssl 扩展）', signature: 'stream_socket_enable_crypto(int $fd, int $enable, int $method): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$enable', description: 'STREAM_CRYPTO_ENABLE/DISABLE' }, { name: '$method', description: 'TLS 方法（STREAM_CRYPTO_METHOD_*）' }], returnType: 'int' },
+    'stream_socket_recvfrom': { description: '接收数据（UDP 或对端地址）', signature: 'stream_socket_recvfrom(int $fd, int $len, int $flags, string &$addr): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$len', description: '最大长度' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '对端地址（引用）' }], returnType: 'string', throwsException: true },
+    'stream_socket_sendto': { description: '发送数据到指定地址', signature: 'stream_socket_sendto(int $fd, string $data, int $flags, string $addr, int $port): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$data', description: '数据' }, { name: '$flags', description: '标志位' }, { name: '$addr', description: '目标地址' }, { name: '$port', description: '目标端口' }], returnType: 'int', throwsException: true },
+    'stream_socket_get_name': { description: '返回 socket 的本地或对端地址', signature: 'stream_socket_get_name(int $fd, bool $want_peer): string', params: [{ name: '$fd', description: '文件描述符' }, { name: '$want_peer', description: 'true=对端, false=本地' }], returnType: 'string', throwsException: true },
+    'stream_socket_shutdown': { description: '关闭 socket 的读/写方向', signature: 'stream_socket_shutdown(int $fd, int $how): bool', params: [{ name: '$fd', description: '文件描述符' }, { name: '$how', description: '方向（STREAM_SHUT_*）' }], returnType: 'bool', throwsException: true },
+    'stream_socket_enable_crypto': { description: '启用/禁用 TLS（需 openssl 扩展）', signature: 'stream_socket_enable_crypto(int $fd, int $enable, int $method): int', params: [{ name: '$fd', description: '文件描述符' }, { name: '$enable', description: 'STREAM_CRYPTO_ENABLE/DISABLE' }, { name: '$method', description: 'TLS 方法（STREAM_CRYPTO_METHOD_*）' }], returnType: 'int', throwsException: true },
     'stream_socket_pair': { description: '创建一对相互连接的 socket（用于进程间通信）', signature: 'stream_socket_pair(int $domain, int $type, int $protocol): array', params: [{ name: '$domain', description: '协议族' }, { name: '$type', description: 'socket 类型' }, { name: '$protocol', description: '协议' }], returnType: 'array' },
 
     // ---- openssl TLS/SSL (基于 mbedTLS 3.6.6, 当前暂停) ----
@@ -1488,6 +1572,29 @@ const functionDocs: Record<string, FuncDoc> = {
         ],
         returnType: 'string'
     },
+
+    // ---- 字符串/输出函数（补全） ----
+    'printf': { description: '格式化输出到 stdout', signature: 'printf(string $format, mixed ...$values): int', params: [{ name: '$format', description: '格式串（%d/%s/%f/%x 等）' }, { name: '...$values', description: '替换值' }], returnType: 'int' },
+
+    // ---- OOP 函数 ----
+    'get_class': { description: '返回对象的类名。匿名类返回 _AnonClass${N}', signature: 'get_class(object $object): string', params: [{ name: '$object', description: '目标对象' }], returnType: 'string' },
+    'get_parent_class': { description: '返回对象的父类名', signature: 'get_parent_class(object $object): string', params: [{ name: '$object', description: '目标对象' }], returnType: 'string' },
+    'is_a': { description: '检查对象是否为指定类或其子类', signature: 'is_a(object $object, string $class): bool', params: [{ name: '$object', description: '目标对象' }, { name: '$class', description: '类名' }], returnType: 'bool' },
+    'is_subclass_of': { description: '检查对象是否为指定类的子类', signature: 'is_subclass_of(object $object, string $class): bool', params: [{ name: '$object', description: '目标对象' }, { name: '$class', description: '类名' }], returnType: 'bool' },
+    'class_exists': { description: '检查类是否存在', signature: 'class_exists(string $class): bool', params: [{ name: '$class', description: '类名' }], returnType: 'bool' },
+    'method_exists': { description: '检查方法是否存在', signature: 'method_exists(object|string $object, string $method): bool', params: [{ name: '$object', description: '对象或类名' }, { name: '$method', description: '方法名' }], returnType: 'bool' },
+    'property_exists': { description: '检查属性是否存在', signature: 'property_exists(object|string $object, string $property): bool', params: [{ name: '$object', description: '对象或类名' }, { name: '$property', description: '属性名' }], returnType: 'bool' },
+    'get_object_vars': { description: '返回对象的属性关联数组（stdClass 动态属性）', signature: 'get_object_vars(object $object): array', params: [{ name: '$object', description: '目标对象' }], returnType: 'array' },
+
+    // ---- 数组函数（补全） ----
+    'array_pad': { description: '将数组填充到指定长度（正=右填充，负=左填充）', signature: 'array_pad(array $array, int $length, mixed $value): array', params: [{ name: '$array', description: '输入数组' }, { name: '$length', description: '目标长度（正右负左）' }, { name: '$value', description: '填充值' }], returnType: 'array' },
+
+    // ---- 哈希函数（补全） ----
+    'hash': { description: '计算哈希值（支持 md5/sha1/sha256/sha512 等）', signature: 'hash(string $algo, string $data): string', params: [{ name: '$algo', description: '算法名（md5/sha1/sha256/sha512）' }, { name: '$data', description: '要哈希的数据' }], returnType: 'string' },
+    'hash_hmac': { description: '计算 HMAC 哈希', signature: 'hash_hmac(string $algo, string $data, string $key): string', params: [{ name: '$algo', description: '算法名' }, { name: '$data', description: '要哈希的数据' }, { name: '$key', description: '密钥' }], returnType: 'string' },
+
+    // ---- 异步与协程（channel.h） ----
+    'chan_select': { description: '多通道多路复用，返回就绪通道索引（全关闭返回 -2，超时返回 -1）', signature: 'chan_select(array $channels, int $timeout_ms = -1): int', params: [{ name: '$channels', description: 'Channel 对象数组' }, { name: '$timeout_ms', description: '超时毫秒（-1 表示无限等待）' }], returnType: 'int' },
 };
 
 // ============================================================================
@@ -1811,6 +1918,7 @@ interface ClassMethodDoc {
     returnType: string;
     isStatic: boolean;
     isProperty: boolean;  // true 表示是属性而非方法
+    throwsException?: boolean;
 }
 
 const classMethodDocs: ClassMethodDoc[] = [
@@ -1868,6 +1976,29 @@ const classMethodDocs: ClassMethodDoc[] = [
     { className: 'AnnotationEntry', methodName: 'name', description: '限定名：Ns\\Class->method / Ns\\Class::staticMethod / Ns\\func / Ns\\Class', signature: '$name: string', params: [], returnType: 'string', isStatic: false, isProperty: true },
     { className: 'AnnotationEntry', methodName: 'call', description: '调用目标方法/静态方法/函数（class 目标报错）。编译期零开销直接调用', signature: 'call(...$args): mixed', params: [{ name: '...$args', description: '调用参数' }], returnType: 'mixed', isStatic: false, isProperty: false },
     { className: 'AnnotationEntry', methodName: 'newInstance', description: '实例化目标类（非 class 目标报错）。返回精确类类型', signature: 'newInstance(...$args): object', params: [{ name: '...$args', description: '构造参数' }], returnType: 'object', isStatic: false, isProperty: false },
+
+    // ---- Channel 类方法（CSP 有界通道，参考 vlang） ----
+    { className: 'Channel', methodName: '__construct', description: '创建有界通道（环形缓冲区，零 malloc）', signature: '__construct(int $capacity)', params: [{ name: '$capacity', description: '通道容量' }], returnType: '', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'push', description: '发送值到通道（阻塞直到有空间）', signature: 'push(mixed $value): void', params: [{ name: '$value', description: '要发送的值' }], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'pop', description: '从通道接收值（阻塞直到有数据）', signature: 'pop(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'tryPush', description: '尝试发送值（非阻塞，失败返回 false）', signature: 'tryPush(mixed $value): bool', params: [{ name: '$value', description: '要发送的值' }], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'tryPop', description: '尝试接收值（非阻塞，无数据返回 false）', signature: 'tryPop(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'close', description: '关闭通道（剩余元素释放，后续 push 抛 ChannelClosedException）', signature: 'close(): void', params: [], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'isClosed', description: '检查通道是否已关闭', signature: 'isClosed(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'length', description: '返回通道当前元素数量', signature: 'length(): int', params: [], returnType: 'int', isStatic: false, isProperty: false },
+    { className: 'Channel', methodName: 'capacity', description: '返回通道容量', signature: 'capacity(): int', params: [], returnType: 'int', isStatic: false, isProperty: false },
+
+    // ---- Future 类方法（一次性异步结果，支持 await/then/catch） ----
+    { className: 'Future', methodName: 'create', description: '创建 Future（静态方法，返回新实例）', signature: 'static create(): Future', params: [], returnType: 'Future', isStatic: true, isProperty: false },
+    { className: 'Future', methodName: 'resolve', description: '完成 Future 并设置结果值', signature: 'resolve(mixed $value): void', params: [{ name: '$value', description: '结果值' }], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'reject', description: '拒绝 Future（await 时抛 FutureRejectedException）', signature: 'reject(mixed $reason): void', params: [{ name: '$reason', description: '拒绝原因' }], returnType: 'void', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'await', description: '阻塞等待 Future 完成，返回结果值', signature: 'await(): mixed', params: [], returnType: 'mixed', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'isReady', description: '检查 Future 是否已完成', signature: 'isReady(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'isRejected', description: '检查 Future 是否被 reject', signature: 'isRejected(): bool', params: [], returnType: 'bool', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'then', description: '注册成功回调，返回新 Future（链式调用）', signature: 'then(callable $callback): Future', params: [{ name: '$callback', description: '成功回调 fn(mixed $value): mixed' }], returnType: 'Future', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'catch', description: '注册失败回调，返回新 Future（链式调用）', signature: 'catch(callable $callback): Future', params: [{ name: '$callback', description: '失败回调 fn(mixed $reason): mixed' }], returnType: 'Future', isStatic: false, isProperty: false },
+    { className: 'Future', methodName: 'all', description: '等待所有 Future 完成（静态方法）', signature: 'static all(array $futures): array', params: [{ name: '$futures', description: 'Future 对象数组' }], returnType: 'array', isStatic: true, isProperty: false },
+    { className: 'Future', methodName: 'race', description: '返回最先完成的 Future 的结果（静态方法）', signature: 'static race(array $futures): mixed', params: [{ name: '$futures', description: 'Future 对象数组' }], returnType: 'mixed', isStatic: true, isProperty: false },
 ];
 
 // ============================================================================
@@ -2012,7 +2143,7 @@ function buildCompletionItems(): CompletionItem[] {
     }
 
     // ---- 魔术常量 ----
-    for (let c of ['__LINE__', '__FILE__', '__DIR__', '__CLASS__', '__METHOD__', '__NAMESPACE__', 'DIRECTORY_SEPARATOR']) {
+    for (let c of ['__LINE__', '__FILE__', '__DIR__', '__CLASS__', '__METHOD__', '__FUNCTION__', '__NAMESPACE__', 'DIRECTORY_SEPARATOR', '__EXT__', '__INC__', '__CMD__']) {
         items.push({
             label: c,
             kind: CompletionItemKind.Constant,
@@ -2456,3 +2587,30 @@ export function getFunctionSignature(name: string): SignatureInformation | null 
         parameters: params
     };
 }
+
+// 获取会抛出 Exception 的内置函数名集合
+export function getBuiltinExceptionFunctions(): Set<string> {
+    let result = new Set<string>();
+    for (let name in functionDocs) {
+        let doc = functionDocs[name];
+        if (doc.throwsException) {
+            result.add(name);
+        }
+    }
+    return result;
+}
+
+// 获取会抛出 Exception 的内置方法映射: className -> Set<methodName>
+export function getBuiltinExceptionMethods(): Map<string, Set<string>> {
+    let result = new Map<string, Set<string>>();
+    for (let m of classMethodDocs) {
+        if (m.throwsException) {
+            if (!result.has(m.className)) {
+                result.set(m.className, new Set());
+            }
+            result.get(m.className)!.add(m.methodName);
+        }
+    }
+    return result;
+}
+

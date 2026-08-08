@@ -4,6 +4,7 @@
     "scopeName": "source.tinyphp",
     "fileTypes": ["tphp", "php", "inc"],
     "patterns": [
+        { "include": "#const-declarations" },
         { "include": "#php-tag" },
         { "include": "#preprocessor" },
         { "include": "#annotations" },
@@ -20,6 +21,53 @@
         { "include": "#numbers" }
     ],
     "repository": {
+        "const-declarations": {
+            "patterns": [
+                {
+                    "comment": "const Type NAME = value — 有类型常量（GRAMMAR.md §3.3）",
+                    "begin": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "beginCaptures": {
+                        "1": { "name": "storage.modifier.php" },
+                        "2": { "name": "entity.name.type.class.php" },
+                        "3": { "name": "entity.name.constant.php" }
+                    },
+                    "end": ";",
+                    "endCaptures": {
+                        "0": { "name": "punctuation.terminator.statement.php" }
+                    },
+                    "patterns": [
+                        { "include": "#operators" },
+                        { "include": "#strings" },
+                        { "include": "#numbers" },
+                        { "include": "#constants" },
+                        { "include": "#variables" },
+                        { "include": "#functions" },
+                        { "include": "#c-interop" }
+                    ]
+                },
+                {
+                    "comment": "const NAME = value — 无类型常量（TinyPHP 按字面量推导, GRAMMAR.md §0）",
+                    "begin": "\\b(const)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                    "beginCaptures": {
+                        "1": { "name": "storage.modifier.php" },
+                        "2": { "name": "entity.name.constant.php" }
+                    },
+                    "end": ";",
+                    "endCaptures": {
+                        "0": { "name": "punctuation.terminator.statement.php" }
+                    },
+                    "patterns": [
+                        { "include": "#operators" },
+                        { "include": "#strings" },
+                        { "include": "#numbers" },
+                        { "include": "#constants" },
+                        { "include": "#variables" },
+                        { "include": "#functions" },
+                        { "include": "#c-interop" }
+                    ]
+                }
+            ]
+        },
         "php-tag": {
             "name": "meta.embedded.block.php",
             "begin": "<\\?(php|=)?",
@@ -27,6 +75,7 @@
             "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.php" } },
             "endCaptures": { "0": { "name": "punctuation.section.embedded.end.php" } },
             "patterns": [
+                { "include": "#const-declarations" },
                 { "include": "#preprocessor" },
                 { "include": "#annotations" },
                 { "include": "#comments" },
@@ -108,7 +157,7 @@
                                 },
                                 {
                                     "name": "constant.language.platform.tinyphp",
-                                    "match": "\\b(Windows|Win|Linux|MacOS|Darwin|Mac|TCC|TinyC|GCC|Clang|x86_64|amd64|x64|aarch64|arm64|debug|prod)\\b"
+                                    "match": "\\b(Windows|Win|Linux|MacOS|Darwin|Mac|Android|TCC|TinyC|GCC|Clang|NDK|NDKClang|x86_64|amd64|x64|aarch64|arm64|armv7a|armeabi-v7a|i686|x86|debug|prod)\\b"
                                 },
                                 {
                                     "name": "punctuation.parenthesis.tinyphp",
@@ -141,6 +190,31 @@
                     }
                 },
                 { "include": "#comments" }
+            ]
+        },
+
+        "generic-array-type": {
+            "patterns": [
+                {
+                    "comment": "Nested array<T> — recursive for array<array<int>>",
+                    "name": "meta.type.generic.tinyphp",
+                    "begin": "\\b(array)\\s*(<)",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.other.type.php" },
+                        "2": { "name": "punctuation.definition.type.parameters.begin.php" }
+                    },
+                    "end": ">",
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.type.parameters.end.php" }
+                    },
+                    "patterns": [
+                        { "include": "#generic-array-type" }
+                    ]
+                },
+                {
+                    "name": "entity.name.type.class.php",
+                    "match": "\\b(int|float|string|bool|array|mixed|object|callable|void|never)\\b|\\b([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*)\\b"
+                }
             ]
         },
 
@@ -427,8 +501,9 @@
                     "match": "\\b(true|false|null)\\b"
                 },
                 {
+                    "comment": "PHP magic constants (GRAMMAR.md §10) + TinyPHP path constants for #include (phpc.md)",
                     "name": "constant.language.php",
-                    "match": "\\b(__LINE__|__FILE__|__DIR__|__CLASS__|__METHOD__|__FUNCTION__|__NAMESPACE__|DIRECTORY_SEPARATOR)\\b"
+                    "match": "\\b(__LINE__|__FILE__|__DIR__|__CLASS__|__METHOD__|__FUNCTION__|__NAMESPACE__|DIRECTORY_SEPARATOR|__EXT__|__INC__|__CMD__)\\b"
                 },
                 {
                     "comment": "Extension constants (Filter/Pcre/Zlib/Zip/Stream/OpenSSL/Calendar/Exif/Fileinfo/Iconv/Seek)",
@@ -593,6 +668,22 @@
                     }
                 },
                 {
+                    "comment": "array<T> generic array type (TinyPHP Task 5.4, supports nested array<array<int>>)",
+                    "name": "meta.type.generic.tinyphp",
+                    "begin": "\\b(array)\\s*(<)",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.other.type.php" },
+                        "2": { "name": "punctuation.definition.type.parameters.begin.php" }
+                    },
+                    "end": ">",
+                    "endCaptures": {
+                        "0": { "name": "punctuation.definition.type.parameters.end.php" }
+                    },
+                    "patterns": [
+                        { "include": "#generic-array-type" }
+                    ]
+                },
+                {
                     "comment": "fn/function parameter type: Type $name",
                     "match": "(?<=[(,]\\s*)((?:int|float|string|bool|array|mixed|object|void|never|callable)|([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*))\\s+(\\$[a-zA-Z_\\x7f-\\xff][a-zA-Z0-9_\\x7f-\\xff]*)",
                     "captures": {
@@ -618,10 +709,12 @@
                     }
                 },
                 {
-                    "comment": "fn/function return type: function foo(): Type",
-                    "match": "(?<=:\\s*)([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*)(?=\\s*(?:\\{|;|\\n|$))",
+                    "comment": "fn/function return type: function foo(): Type — supports Type|Exception union (TinyPHP extension, GRAMMAR.md §3)",
+                    "match": "(?<=:\\s*)([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*)(?:\\s*(\\|)\\s*([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*))?(?=\\s*(?:\\{|;|\\n|$))",
                     "captures": {
-                        "1": { "name": "entity.name.type.class.php" }
+                        "1": { "name": "entity.name.type.class.php" },
+                        "2": { "name": "keyword.operator.type.union.php" },
+                        "3": { "name": "entity.name.type.class.php" }
                     }
                 },
                 {
@@ -632,18 +725,6 @@
                         "2": { "name": "entity.name.type.class.php" },
                         "3": { "name": "variable.other.property.php" }
                     }
-                },
-                {
-                    "comment": "const [type] NAME — typed class constant (built-in + custom class names)",
-                    "match": "(?<=\\bconst\\s+)([A-Za-z_\\x7f-\\xff][A-Za-z0-9_\\\\\\x7f-\\xff]*)\\s+([A-Za-z_][A-Za-z0-9_]*)",
-                    "captures": {
-                        "1": { "name": "entity.name.type.class.php" },
-                        "2": { "name": "entity.name.constant.php" }
-                    }
-                },
-                {
-                    "comment": "const NAME — untyped constant (warning in TinyPHP)",
-                    "match": "(?<=\\bconst\\s+)[A-Z_][A-Z0-9_]*"
                 }
             ]
         },
@@ -664,8 +745,9 @@
                     "match": "\\b(get|set)\\b(?=\\s*(?:=>|\\{))"
                 },
                 {
+                    "comment": "error() is TinyPHP shorthand for throw new Exception($msg)",
                     "name": "keyword.control.exception.php",
-                    "match": "\\b(try|catch|finally|throw)\\b"
+                    "match": "\\b(try|catch|finally|throw)\\b|\\berror\\b(?=\\s*\\()"
                 },
                 {
                     "name": "keyword.other.php",
@@ -693,12 +775,12 @@
                 },
                 {
                     "name": "support.function.builtin.tinyphp",
-                    "match": "\\b(var_dump|print_r|count|isset|empty|unset|error|exit|die|time|date|sleep|usleep|hrtime|microtime|mktime|strtotime|uniqid|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable|is_resource|is_numeric|gettype|getenv|putenv|intval|floatval|strval|boolval|abs|round|ceil|floor|sqrt|pow|pi|fmod|deg2rad|rad2deg|intdiv|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|log10|is_finite|is_infinite|is_nan|rand|mt_rand|random_int|random_bytes|preg_match|preg_match_all|preg_replace|preg_split|preg_grep|preg_quote|preg_last_error|preg_last_error_msg|iconv|iconv_strlen|iconv_strpos|iconv_substr|iconv_get_encoding|iconv_set_encoding|iconv_mime_encode|iconv_mime_decode|filter_var|filter_list|filter_id|password_hash|password_verify|pcntl_fork|pcntl_wait|pcntl_waitpid|pcntl_exec|pcntl_alarm|pcntl_get_last_error|pcntl_strerror|posix_getpid|posix_getppid|posix_getuid|posix_geteuid|posix_getgid|posix_getegid|posix_getcwd|posix_isatty|posix_kill|posix_strerror|posix_get_last_error|posix_ttyname|posix_uname|posix_times|exif_imagetype|exif_read_data|exif_thumbnail|exif_tagname|exif_make_test_jpeg|exif_make_test_jpeg_ex|exif_make_test_tiff|exif_make_test_header|gregoriantojd|jdtogregorian|juliantojd|jdtojulian|jewishtojd|jdtojewish|jdtojewish_str|jewish_month_name|frenchtojd|jdtofrench|cal_days_in_month|cal_from_jd|cal_to_jd|cal_info|easter_date|easter_days|finfo_open|finfo_file|finfo_buffer|finfo_close|finfo_set_flags|mime_content_type|gzcompress|gzuncompress|gzencode|gzdecode|gzdeflate|gzinflate|zlib_encode|zlib_decode|gzopen|gzclose|gzread|gzwrite|gzputs|gzeof|gzgets|gzgetc|gzrewind|gzseek|gztell|gzpassthru|gzflush|gzfile|readgzfile|deflate_init|deflate_add|inflate_init|inflate_add|inflate_get_status|inflate_get_read_len|zip_open|zip_close|zip_num_files|zip_get_error_string|zip_locate|zip_read|zip_stat|zip_entry_name|zip_entry_filesize|zip_entry_compressedsize|zip_entry_compressionmethod|zip_entry_open|zip_entry_read|zip_entry_close|zip_add_file|zip_add_dir|zip_delete|zip_rename|stream_close|stream_last_error|stream_strerror|stream_set_blocking|stream_set_read_buffer|stream_set_write_buffer|stream_set_timeout|stream_isatty|stream_select|stream_get_contents|stream_get_line|stream_get_meta_data|stream_socket_server|stream_socket_accept|stream_socket_client|stream_socket_recvfrom|stream_socket_sendto|stream_socket_get_name|stream_socket_shutdown|stream_socket_enable_crypto|stream_socket_pair|openssl_ctx_new|openssl_ctx_free|openssl_ctx_use_certificate_file|openssl_ctx_use_private_key_file|openssl_ctx_set_verify|openssl_ctx_set_options|openssl_ssl_new|openssl_ssl_free|openssl_ssl_set_fd|openssl_ssl_connect|openssl_ssl_accept|openssl_ssl_read|openssl_ssl_write|openssl_ssl_shutdown|openssl_ssl_get_cipher_name|openssl_ssl_get_version|openssl_error_string|openssl_encrypt|openssl_decrypt|openssl_random_pseudo_bytes|openssl_digest|strtr2)\\b"
+                    "match": "\\b(var_dump|print_r|count|isset|empty|unset|error|exit|die|time|date|sleep|usleep|hrtime|microtime|mktime|strtotime|uniqid|is_int|is_float|is_string|is_bool|is_array|is_object|is_null|is_callable|is_resource|is_numeric|gettype|getenv|putenv|intval|floatval|strval|boolval|abs|round|ceil|floor|sqrt|pow|pi|fmod|deg2rad|rad2deg|intdiv|sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|exp|log|log10|is_finite|is_infinite|is_nan|rand|mt_rand|random_int|random_bytes|ctype_alnum|ctype_alpha|ctype_cntrl|ctype_digit|ctype_graph|ctype_lower|ctype_print|ctype_punct|ctype_space|ctype_upper|ctype_xdigit|preg_match|preg_match_all|preg_replace|preg_split|preg_grep|preg_quote|preg_last_error|preg_last_error_msg|iconv|iconv_strlen|iconv_strpos|iconv_substr|iconv_get_encoding|iconv_set_encoding|iconv_mime_encode|iconv_mime_decode|filter_var|filter_list|filter_id|password_hash|password_verify|pcntl_fork|pcntl_wait|pcntl_waitpid|pcntl_exec|pcntl_alarm|pcntl_get_last_error|pcntl_strerror|posix_getpid|posix_getppid|posix_getuid|posix_geteuid|posix_getgid|posix_getegid|posix_getcwd|posix_isatty|posix_kill|posix_strerror|posix_get_last_error|posix_ttyname|posix_uname|posix_times|exif_imagetype|exif_read_data|exif_thumbnail|exif_tagname|exif_make_test_jpeg|exif_make_test_jpeg_ex|exif_make_test_tiff|exif_make_test_header|gregoriantojd|jdtogregorian|juliantojd|jdtojulian|jewishtojd|jdtojewish|jdtojewish_str|jewish_month_name|frenchtojd|jdtofrench|cal_days_in_month|cal_from_jd|cal_to_jd|cal_info|easter_date|easter_days|finfo_open|finfo_file|finfo_buffer|finfo_close|finfo_set_flags|mime_content_type|file_get_contents|file_put_contents|gzcompress|gzuncompress|gzencode|gzdecode|gzdeflate|gzinflate|zlib_encode|zlib_decode|gzopen|gzclose|gzread|gzwrite|gzputs|gzeof|gzgets|gzgetc|gzrewind|gzseek|gztell|gzpassthru|gzflush|gzfile|readgzfile|deflate_init|deflate_add|inflate_init|inflate_add|inflate_get_status|inflate_get_read_len|zip_open|zip_close|zip_num_files|zip_get_error_string|zip_locate|zip_read|zip_stat|zip_entry_name|zip_entry_filesize|zip_entry_compressedsize|zip_entry_compressionmethod|zip_entry_open|zip_entry_read|zip_entry_close|zip_add_file|zip_add_dir|zip_delete|zip_rename|stream_close|stream_last_error|stream_strerror|stream_set_blocking|stream_set_read_buffer|stream_set_write_buffer|stream_set_timeout|stream_isatty|stream_select|stream_get_contents|stream_get_line|stream_get_meta_data|stream_socket_server|stream_socket_accept|stream_socket_client|stream_socket_recvfrom|stream_socket_sendto|stream_socket_get_name|stream_socket_shutdown|stream_socket_enable_crypto|stream_socket_pair|openssl_ctx_new|openssl_ctx_free|openssl_ctx_use_certificate_file|openssl_ctx_use_private_key_file|openssl_ctx_set_verify|openssl_ctx_set_options|openssl_ssl_new|openssl_ssl_free|openssl_ssl_set_fd|openssl_ssl_connect|openssl_ssl_accept|openssl_ssl_read|openssl_ssl_write|openssl_ssl_shutdown|openssl_ssl_get_cipher_name|openssl_ssl_get_version|openssl_error_string|openssl_encrypt|openssl_decrypt|openssl_random_pseudo_bytes|openssl_digest|strtr2|strlen|substr|str_replace|str_contains|str_starts_with|str_ends_with|str_pad|str_split|strrev|str_repeat|strtr|strcmp|strcasecmp|strpos|strrpos|stripos|strripos|explode|implode|trim|ltrim|rtrim|strtolower|strtoupper|ucfirst|lcfirst|ucwords|nl2br|wordwrap|chr|ord|printf|sprintf|number_format|bin2hex|hex2bin|md5|sha1|sha256|sha512|crc32|hash|hash_hmac|base_convert|dechex|hexdec|decoct|octdec|decbin|bindec|max|min|json_encode|json_decode|json_validate|base64_encode|base64_decode|urlencode|urldecode|htmlspecialchars|htmlspecialchars_decode|mb_strlen|mb_substr|mb_strpos|array_keys|array_values|array_merge|array_slice|array_unique|array_reverse|array_diff|array_intersect|array_push|array_pop|array_shift|array_unshift|sort|rsort|shuffle|asort|arsort|ksort|krsort|uasort|usort|in_array|array_key_exists|array_search|array_fill|array_column|array_count_values|array_pad|array_combine|array_chunk|array_flip|array_is_list|array_sum|array_product|array_map|array_filter|array_reduce|get_class|get_parent_class|is_a|is_subclass_of|class_exists|method_exists|property_exists|atan2|hypot|get_object_vars|chan_select)\\b"
                 },
                 {
-                    "comment": "TinyPHP built-in classes: Generator / Thread / Mutex / etc.",
+                    "comment": "TinyPHP built-in classes: Generator / Thread / Mutex / Channel / Future / stdClass / etc.",
                     "name": "support.class.builtin.tinyphp",
-                    "match": "\\b(Generator|Thread|Mutex|CondVar|WaitGroup|Parallel|Resource|File|Exception)\\b"
+                    "match": "\\b(Generator|Thread|Mutex|CondVar|WaitGroup|Parallel|Channel|Future|Resource|File|stdClass|Exception|RuntimeException|ChannelClosedException|FutureRejectedException)\\b"
                 }
             ]
         },
@@ -754,8 +836,8 @@
             "comment": "Type casting, reference params, labels",
             "patterns": [
                 {
-                    "comment": "(int)/(float)/(string)/(bool) type cast",
-                    "match": "\\((int|float|string|bool)\\)",
+                    "comment": "(int)/(float)/(string)/(bool)/(object) type cast (GRAMMAR.md §9, object cast: array→stdClass)",
+                    "match": "\\((int|float|string|bool|object)\\)",
                     "captures": {
                         "1": { "name": "keyword.other.type.php" }
                     }

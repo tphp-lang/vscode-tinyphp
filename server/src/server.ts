@@ -689,6 +689,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     // 未使用变量/常量检测：收集所有定义点，扫描后文是否被引用
     checkUnusedSymbols(text, lines, diagnostics);
 
+    // |Exception 函数/方法调用点：通过 Inlay Hint 在调用后显示灰色 ! 提示（不作为诊断波浪线）
+    //   数据由 onInlayHint 处理时实时收集
+
     // Send the computed diagnostics to VS Code
     connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
@@ -921,6 +924,258 @@ function checkUnusedSymbols(text: string, lines: string[], diagnostics: Diagnost
             });
         }
     }
+}
+
+// 检测 |Exception 函数/方法的调用点（GRAMMAR.md §3: 函数体含 throw/error() 时须声明 |Exception）
+//   在调用处显示 Warning 提示用户用 try-catch 捕获
+// 异常调用点信息：行号、调用后位置（用于 Inlay Hint 显示 !）、消息
+interface ExceptionCallSite {
+    line: number;
+    afterCallChar: number;  // 调用 ) 后的字符位置（Inlay Hint 插入位置）
+    message: string;
+}
+
+// 收集未处理的异常调用点（try 块内 / or {} / 已加 ! 断言的调用不收集）
+function collectExceptionCallSites(text: string, lines: string[]): ExceptionCallSite[] {
+    let sites: ExceptionCallSite[] = [];
+    // 第一遍：收集含 |Exception 的函数/方法定义 + 变量类型映射
+    //   合并内置函数（functionDocs 中 throwsException=true 的条目）
+    let exceptionFunctions = TinyPHP.getBuiltinExceptionFunctions();  // 初始化为内置函数集合
+    let exceptionMethods = TinyPHP.getBuiltinExceptionMethods();     // 初始化为内置方法映射
+    let varTypes = new Map<string, string>();              // $var -> ClassName（用于推断 $obj->method() 的类）
+
+    let currentClass = '';
+    let braceDepth = 0;
+    let classBraceLevel = -1;
+    let pendingClassBrace = false;  // 类声明后等待首个 {（处理 class X\n{ 跨行写法）
+
+    // 返回类型是否含 |Exception（或子类，如 RuntimeException）
+    function isExceptionReturnType(rt: string): boolean {
+        return /\|\s*\\?(?:[A-Za-z_]\w*)?Exception\b/.test(rt);
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        let rawLine = lines[i];
+        let line = stripCommentsAndStrings(rawLine);
+
+        // 类声明
+        let classMatch = line.match(/\b(class|interface|trait|enum)\s+([A-Za-z_]\w*)/);
+        if (classMatch) {
+            currentClass = classMatch[2];
+            pendingClassBrace = true;
+        }
+
+        // 更新类块追踪
+        for (let ch of line) {
+            if (ch === '{') {
+                if (pendingClassBrace && classBraceLevel < 0) {
+                    classBraceLevel = braceDepth;
+                    pendingClassBrace = false;
+                }
+                braceDepth++;
+            } else if (ch === '}') {
+                braceDepth--;
+                if (classBraceLevel >= 0 && braceDepth === classBraceLevel) {
+                    classBraceLevel = -1;
+                    currentClass = '';
+                }
+            }
+        }
+
+        // 函数定义：function foo(params): Type|Exception {
+        //   返回类型在同一行的情况（大多数单行函数定义）
+        let funcMatch = line.match(/\bfunction\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*:\s*([A-Za-z_\\][\w\\]*(?:\s*\|\s*[A-Za-z_\\][\w\\]*)*)/);
+        if (funcMatch) {
+            let funcName = funcMatch[1];
+            let returnType = funcMatch[2];
+            if (isExceptionReturnType(returnType)) {
+                if (currentClass && classBraceLevel >= 0) {
+                    if (!exceptionMethods.has(currentClass)) {
+                        exceptionMethods.set(currentClass, new Set());
+                    }
+                    exceptionMethods.get(currentClass)!.add(funcName);
+                } else {
+                    exceptionFunctions.add(funcName);
+                }
+            }
+        }
+
+        // 变量类型收集（用于推断 $obj->method() 的类）
+        //   $var = new ClassName(...)
+        let newMatch = line.match(/\$(\w+)\s*=\s*new\s+([A-Z][\w\\]*)/);
+        if (newMatch) {
+            varTypes.set(newMatch[1], newMatch[2]);
+        }
+        //   ClassName $var  /  ClassName $var = ...
+        let typedVar = line.match(/\b([A-Z][\w\\]*)\s+\$(\w+)/);
+        if (typedVar) {
+            varTypes.set(typedVar[2], typedVar[1]);
+        }
+    }
+
+    // 排除控制流关键字（避免误匹配 if(/for(/while( 等）
+    const controlFlow = new Set(['if', 'elseif', 'else', 'for', 'foreach', 'while', 'do',
+        'switch', 'case', 'match', 'catch', 'return', 'echo', 'print', 'array',
+        'isset', 'empty', 'unset', 'list', 'new', 'function']);
+
+    // 第二遍：扫描调用点
+    let curClass = '';
+    let curBraceDepth = 0;
+    let curClassBraceLevel = -1;
+    let pendingClassBrace2 = false;  // 类声明后等待首个 {
+    // try 块追踪：记录每层 braceDepth 是否处于 try 块内
+    let tryBraceLevels = new Set<number>();  // 进入 try { 时记录 braceDepth+1
+    let inTryBlock = false;
+    for (let i = 0; i < lines.length; i++) {
+        let rawLine = lines[i];
+        let line = stripCommentsAndStrings(rawLine);
+
+        // 追踪当前类（用于 $this->method() 推断）
+        let classMatch2 = line.match(/\b(class|interface|trait|enum)\s+([A-Za-z_]\w*)/);
+        if (classMatch2) {
+            curClass = classMatch2[2];
+            pendingClassBrace2 = true;
+        }
+        // 检测 try 关键字（后跟 { 或换行后 {）
+        let hasTry = /\btry\b/.test(line);
+        for (let ch of line) {
+            if (ch === '{') {
+                if (pendingClassBrace2 && curClassBraceLevel < 0) {
+                    curClassBraceLevel = curBraceDepth;
+                    pendingClassBrace2 = false;
+                }
+                if (hasTry) tryBraceLevels.add(curBraceDepth + 1);
+                curBraceDepth++;
+            } else if (ch === '}') {
+                curBraceDepth--;
+                if (curClassBraceLevel >= 0 && curBraceDepth === curClassBraceLevel) {
+                    curClassBraceLevel = -1;
+                    curClass = '';
+                }
+                if (tryBraceLevels.has(curBraceDepth + 1)) {
+                    tryBraceLevels.delete(curBraceDepth + 1);
+                }
+            }
+        }
+        inTryBlock = false;
+        for (let lvl of tryBraceLevels) {
+            if (curBraceDepth >= lvl) { inTryBlock = true; break; }
+        }
+
+        // 普通函数调用：foo(...)
+        //   在原始行上匹配（位置与 Inlay Hint 对齐），跳过字符串/注释内的误匹配
+        for (let m of rawLine.matchAll(/\b([a-z_]\w*)\s*\(/g)) {
+            let funcName = m[1];
+            if (controlFlow.has(funcName)) continue;
+            if (isInStringOrComment(rawLine, m.index!)) continue;
+            if (exceptionFunctions.has(funcName)) {
+                // try 块内 / or {} 捕获 / 已加 ! 断言 → 不提示
+                if (inTryBlock) continue;
+                let afterPos = findAfterCallPos(rawLine, m.index! + m[0].length);
+                if (afterPos.handled) continue;
+                sites.push({
+                    line: i,
+                    afterCallChar: afterPos.pos,
+                    message: `${funcName}() 声明了 |Exception 返回类型，调用处应使用 try-catch 捕获异常`
+                });
+            }
+        }
+
+        // 静态方法调用：ClassName::method(...)
+        for (let m of rawLine.matchAll(/\b([A-Z][\w\\]*)::([a-zA-Z_]\w*)\s*\(/g)) {
+            let className = m[1];
+            let methodName = m[2];
+            if (isInStringOrComment(rawLine, m.index!)) continue;
+            let methods = exceptionMethods.get(className);
+            if (methods && methods.has(methodName)) {
+                if (inTryBlock) continue;
+                let afterPos = findAfterCallPos(rawLine, m.index! + m[0].length);
+                if (afterPos.handled) continue;
+                sites.push({
+                    line: i,
+                    afterCallChar: afterPos.pos,
+                    message: `${className}::${methodName}() 声明了 |Exception 返回类型，调用处应使用 try-catch 捕获异常`
+                });
+            }
+        }
+
+        // 实例方法调用：$var->method(...) 或 $this->method(...)
+        for (let m of rawLine.matchAll(/\$(\w+)->([a-zA-Z_]\w*)\s*\(/g)) {
+            let varName = m[1];
+            let methodName = m[2];
+            if (isInStringOrComment(rawLine, m.index!)) continue;
+            // $this 使用当前类名；其他变量查 varTypes 映射
+            let className = varName === 'this' ? curClass : varTypes.get(varName);
+            if (className) {
+                let methods = exceptionMethods.get(className);
+                if (methods && methods.has(methodName)) {
+                    if (inTryBlock) continue;
+                    let afterPos = findAfterCallPos(rawLine, m.index! + m[0].length);
+                    if (afterPos.handled) continue;
+                    sites.push({
+                        line: i,
+                        afterCallChar: afterPos.pos,
+                        message: `${className}->${methodName}() 声明了 |Exception 返回类型，调用处应使用 try-catch 捕获异常`
+                    });
+                }
+            }
+        }
+    }
+    return sites;
+}
+
+// 判断原始行中某个位置是否在字符串字面量或注释内（避免误匹配字符串内的函数名）
+function isInStringOrComment(line: string, pos: number): boolean {
+    let i = 0;
+    let inString: '"' | "'" | null = null;
+    let inLineComment = false;
+    let inBlockComment = false;
+    while (i < pos) {
+        let ch = line[i];
+        let next = line[i + 1] || '';
+        if (inLineComment) return true;  // 行注释内
+        if (inBlockComment) {
+            if (ch === '*' && next === '/') { inBlockComment = false; i += 2; continue; }
+            i++; continue;
+        }
+        if (inString) {
+            if (ch === '\\') { i += 2; continue; }
+            if (ch === inString) { inString = null; i++; continue; }
+            i++; continue;
+        }
+        if (ch === '/' && next === '/') { inLineComment = true; i += 2; continue; }
+        if (ch === '/' && next === '*') { inBlockComment = true; i += 2; continue; }
+        if (ch === '#') { inLineComment = true; i += 2; continue; }
+        if (ch === '"' || ch === "'") { inString = ch; i++; continue; }
+        i++;
+    }
+    return inString !== null || inLineComment || inBlockComment;
+}
+
+// 查找调用表达式结束位置 + 是否已处理（! 断言 / or {} 捕获块）
+//   startAfterOpen = 紧接在 "(" 后的位置
+function findAfterCallPos(line: string, startAfterOpen: number): { pos: number; handled: boolean } {
+    let depth = 1;  // 已经消耗了一个 "("
+    let j = startAfterOpen;
+    while (j < line.length && depth > 0) {
+        let ch = line[j];
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        j++;
+    }
+    // depth === 0 时，j 指向 ")" 后一个位置
+    let afterCall = j;  // ")" 后的位置（Inlay Hint 插入点）
+    // 跳过空白
+    while (j < line.length && (line[j] === ' ' || line[j] === '\t')) j++;
+    // 检查 ! 断言（调用后紧跟 ! 表示已知晓异常风险）
+    if (j < line.length && line[j] === '!') return { pos: afterCall, handled: true };
+    // 检查 or {} 捕获块：or 后跟可选空白和 {
+    if (j + 2 <= line.length && line.substring(j, j + 2) === 'or') {
+        let k = j + 2;
+        while (k < line.length && (line[k] === ' ' || line[k] === '\t')) k++;
+        if (k < line.length && line[k] === '{') return { pos: afterCall, handled: true };
+    }
+    return { pos: afterCall, handled: false };
 }
 
 // 剥离注释和字符串（用于符号使用扫描）
@@ -1522,6 +1777,20 @@ connection.languages.inlayHint.on(
             updateBraceState(line);
         }
 
+        // 5. 异常调用点提示：在未捕获的 |Exception 调用后显示灰色 ! 标记
+        //    （try 块内 / or {} / 已加 ! 断言的调用不显示）
+        let exceptionSites = collectExceptionCallSites(text, lines);
+        for (let s of exceptionSites) {
+            hints.push({
+                position: Position.create(s.line, s.afterCallChar),
+                label: '!',
+                kind: InlayHintKind.Type,
+                paddingLeft: false,
+                paddingRight: false,
+                tooltip: s.message
+            });
+        }
+
         return hints;
 
         // 局部函数：更新类块追踪状态
@@ -1660,9 +1929,9 @@ function inferTypeFromLiteral(expr: string): string | null {
     if (/^"(?:[^"\\]|\\.)*"$/.test(trimmed) || /^'(?:[^'\\]|\\.)*'$/.test(trimmed)) {
         return 'string';
     }
-    // 数组
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) return 'array';
-    if (trimmed.startsWith('array(') && trimmed.endsWith(')')) return 'array';
+    // 数组（无类型注解时默认推导为 array<mixed>，GRAMMAR.md §0 array<T> 泛型）
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) return 'array<mixed>';
+    if (trimmed.startsWith('array(') && trimmed.endsWith(')')) return 'array<mixed>';
 
     // 函数调用：\ns\funcName(...) 或 funcName(...) 或 Foo::bar(...) — 通过内置函数表推导返回类型
     //   注意：方法调用 $obj->bar(...) 无法静态确定，返回 null
@@ -1681,9 +1950,9 @@ function inferTypeFromLiteral(expr: string): string | null {
             if (/^(is_|ctype_)/.test(bareName)) return 'bool';
             if (/^str_/.test(bareName)) return 'string';
             if (/^array_/.test(bareName)) {
-                // array_keys/array_map/array_filter 等多数返回 array，array_sum/array_product 返回 int|float
+                // array_keys/array_map/array_filter 等多数返回 array<mixed>，array_sum/array_product 返回 int|float
                 if (/^array_(sum|product)$/.test(bareName)) return 'int';
-                return 'array';
+                return 'array<mixed>';
             }
             // in_array → bool
             if (bareName === 'in_array') return 'bool';
